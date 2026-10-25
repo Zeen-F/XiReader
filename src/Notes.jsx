@@ -218,7 +218,7 @@ const Notes = forwardRef(function Notes({ document, onSaved, onError, onDirtyCha
     && entries.findIndex(other => other.text === entry.text) === index);
   return <div className="notes-body">
     <h2>笔记</h2><p className="notes-intro">{storageMode === 'vault' ? '支持 Markdown，自动保存到 Obsidian 仓库。' : '支持 Markdown，自动保存到本机。'}</p>
-    {storageMode === 'vault' && <p className="vault-note-rule">正文可在两边编辑，批注由 Paperdesk 管理。</p>}
+    {storageMode === 'vault' && <p className="vault-note-rule">正文可在两边编辑，批注由 XiReader 管理。</p>}
     {draft.current && <div className="draft-hint">已恢复本机草稿。</div>}
     {conflict && <div className="notes-conflict" role="alert"><p>已保存的笔记有新版本。你的草稿仍在这里，自动保存已暂停。</p><button className="text-button" disabled={recovering} onClick={loadSaved}>{recovering ? '正在保留草稿…' : '保留草稿并载入已保存笔记'}</button></div>}
     <label className="notes-field"><textarea aria-label="笔记" maxLength={MAX_NOTE_LENGTH} spellCheck="false" value={text} disabled={recovering} onChange={event => change(event.target.value)} placeholder="记录你的想法…"/><span className="word-count">{text.length} 字符</span></label>

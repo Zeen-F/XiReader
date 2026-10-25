@@ -35,7 +35,7 @@ VS Code 或兼容编辑器可打开根目录的 `PDF_Vibecoding.code-workspace`�
 
 `npm run dev` 使用独立的 `DEV_DATA_DIR`，不沿用生产 `PAPERDESK_DATA_DIR`，并清除继承的 `PAPERDESK_VAULT_DIR`／`PAPERDESK_VAULT_SUBDIR`，避免关联正式知识库。检查仓库模式时使用隔离的合成知识库，按 [仓库模式说明](obsidian-vault.md#源码浏览器版) 显式启动。自定义数据目录应位于项目的忽略目录或仓库外，不能放在 `src/`、`public/`、`dist/` 等源码或静态资源位置；仓库模式的缓存也必须位于整个知识库之外。按启动输出访问对应地址。
 
-Mac 和 Windows 启动器会在缺少依赖或构建产物时准备运行；已有 `dist/` 时不会自动判断源码是否更新，因此修改代码后应重新构建。已有服务只有在库身份、产品版本、启动协议与健康状态均匹配时才复用；旧服务缺少身份协议、不同库或非纸间服务会明确拒绝。服务启动先占用本机端口，再打开数据库，避免绑定竞争先迁移目标库。Windows 的 PowerShell 使用 `npm.cmd` / `npx.cmd`，无需放宽执行策略；桌面打包入口和资料位置见 [Windows 指南](windows.md)。
+Mac 和 Windows 启动器会在缺少依赖或构建产物时准备运行；已有 `dist/` 时不会自动判断源码是否更新，因此修改代码后应重新构建。已有服务只有在库身份、产品版本、启动协议与健康状态均匹配时才复用；旧服务缺少身份协议、不同库或非 XiReader 服务会明确拒绝。服务启动先占用本机端口，再打开数据库，避免绑定竞争先迁移目标库。Windows 的 PowerShell 使用 `npm.cmd` / `npx.cmd`，无需放宽执行策略；桌面打包入口和资料位置见 [Windows 指南](windows.md)。
 
 ## 检查
 
@@ -56,7 +56,7 @@ macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run
 | `node scripts/test-vault-desktop.mjs` | 真实 Electron 的 Obsidian 原位 PDF、外部导入和个人书签；打包应用追加 `--packaged <应用路径>` |
 | `npm run browser:dist` | 构建带生产界面的本机浏览器 ZIP，并生成独立校验文件；见 [浏览器发布包](browser-release.md) |
 | `npm run plugin:setup` | 核对当前阅读服务，绑定仓库外的本机插件配置 |
-| `npm run plugin:install` | 完成绑定并向本机 Codex 安装/启用 Paperdesk 插件 |
+| `npm run plugin:install` | 完成绑定并向本机 Codex 安装/启用 XiReader 插件 |
 
 API 与浏览器测试使用自有临时文献库和随机端口，不连接常驻正式库。自动浏览器检查包括 17 项选文回归，以及示例导入、单一笔记保存、导出与刷新恢复；目录回归使用原创生成 PDF，检查多级书签、折叠、筛选、正确跳页、窄窗面板互斥、笔记搜索、文献切换及手动／自动页码校正。另现场生成超过 50 MiB 的原创 PDF，通过文件选择器实际导入与渲染，防止旧文件大小限制回归；大文件不会作为二进制材料提交。CI 使用 Node.js 24，并安装 Chromium 后运行完整检查；工作流存在不等于当前提交已通过远端运行。
 

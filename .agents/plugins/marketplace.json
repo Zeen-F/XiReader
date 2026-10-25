@@ -1,6 +1,6 @@
 {
   "name": "paperdesk-local",
-  "interface": { "displayName": "Paperdesk Local" },
+  "interface": { "displayName": "XiReader Local" },
   "plugins": [
     {
       "name": "paperdesk",

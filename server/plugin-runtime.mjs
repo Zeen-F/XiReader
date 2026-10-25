@@ -32,15 +32,15 @@ export async function ensureReaderRuntime(rawProfile) {
       throw new Error('无法核对阅读服务；请检查本机地址和服务状态。');
     }
     let status;
-    try { status = await response.json(); } catch { throw new Error('这个端口上的服务不是兼容的纸间；没有启动或终止任何服务。'); }
+    try { status = await response.json(); } catch { throw new Error('这个端口上的服务不是兼容的 XiReader；没有启动或终止任何服务。'); }
     if (!response.ok || status.service !== 'paperdesk' || status.apiVersion !== 1) {
-      throw new Error('这个端口上的服务不是兼容的纸间；没有启动或终止任何服务。');
+      throw new Error('这个端口上的服务不是兼容的 XiReader；没有启动或终止任何服务。');
     }
     if (status.libraryId !== profile.libraryId) throw new Error('资料库身份与插件设置不一致；请核对配置。');
     return true;
   }
   if (await probe()) return { started: false };
-  if (rawProfile.autoStart !== true) throw new Error('阅读服务尚未启动，请先启动纸间。');
+  if (rawProfile.autoStart !== true) throw new Error('阅读服务尚未启动，请先启动 XiReader。');
   const url = new URL(profile.baseUrl);
   if (!['127.0.0.1', 'localhost'].includes(url.hostname) || url.port !== '4317') {
     throw new Error('自动启动仅适用于本机 4317 端口；请手动启动自定义服务。');
@@ -73,5 +73,5 @@ export async function ensureReaderRuntime(rawProfile) {
     if (exited) break;
     await new Promise(resolve => setTimeout(resolve, 200));
   }
-  throw new Error('纸间未能就绪。请查看本机 .local/paperdesk-plugin-runtime.log 后手动启动；插件不会终止其他服务。');
+  throw new Error('XiReader 未能就绪。请查看本机 .local/paperdesk-plugin-runtime.log 后手动启动；插件不会终止其他服务。');
 }

@@ -173,7 +173,7 @@ export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDo
     let session;
     if (Object.hasOwn(req.query, 'sessionId')) {
       session = sessions.get(uuidValue(req.query.sessionId, '阅读会话 ID'));
-      if (!session?.visible) throw new HttpError(404, '这个阅读会话已关闭、隐藏或过期，请回到纸间后重试。');
+      if (!session?.visible) throw new HttpError(404, '这个阅读会话已关闭、隐藏或过期，请回到 XiReader 后重试。');
     } else {
       const active = [...sessions.values()].filter(item => item.visible);
       if (active.length > 1) {
@@ -183,7 +183,7 @@ export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDo
         });
       }
       session = active[0];
-      if (!session) throw new HttpError(404, '没有活动阅读会话，请在纸间打开文献后重试。');
+      if (!session) throw new HttpError(404, '没有活动阅读会话，请在 XiReader 打开文献后重试。');
     }
     const doc = documentOr404(session.documentId);
     res.json({ ...summary(session), title: doc.title, selection: session.selection, notesDirty: session.notesDirty, notesRevision: notesRevision(doc) });
@@ -206,7 +206,7 @@ export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDo
     const document = transaction(() => {
       const doc = documentOr404(req.params.id);
       if ([...sessions.values()].some(session => session.documentId === doc.id && session.notesDirty)) {
-        throw new HttpError(409, '纸间中还有未保存的笔记，请先在阅读窗口保存后重试。');
+        throw new HttpError(409, 'XiReader 中还有未保存的笔记，请先在阅读窗口保存后重试。');
       }
       if (expectedNotesRevision !== notesRevision(doc)) {
         const conflict = new HttpError(409, '笔记已更新，请读取最新笔记并核对后重试。');

@@ -10,7 +10,7 @@ function write(file, bytes) { const temp=file+'.'+randomUUID()+'.tmp'; try{fs.wr
 
 export function registerKnowledgeExport({ app, vaultStore, documentOr404, HttpError, objectBody, stringValue, uuidValue, pageValue, rectanglesValue }) {
   const requireVault = () => {
-    if (!vaultStore) throw new HttpError(409, '请先在纸间连接 Obsidian 知识库，再发送到知识工作台。');
+    if (!vaultStore) throw new HttpError(409, '请先在 XiReader 连接 Obsidian 知识库，再发送到知识工作台。');
   };
   app.get('/api/integrations/knowledge/status', (_req, res) => {
     requireVault();

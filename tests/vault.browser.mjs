@@ -65,8 +65,8 @@ export async function vaultWorkflow({context,root,onPreview}) {
     const dialog=page.getByRole('dialog',{name:'资料位置',exact:true});
     await expect(dialog).toContainText('Obsidian 仓库');await expect(dialog).toContainText('精读知识库');await expect(dialog).toContainText('0 份已关联文献');
     const rules=dialog.getByRole('region',{name:'使用规则',exact:true});
-    await expect(rules).toContainText('笔记正文可在 Paperdesk 和 Obsidian 两边编辑');
-    await expect(rules).toContainText('批注、标题和分类在 Paperdesk 修改');
+    await expect(rules).toContainText('笔记正文可在 XiReader 和 Obsidian 两边编辑');
+    await expect(rules).toContainText('批注、标题和分类在 XiReader 修改');
     await expect(rules).toContainText('PDF 留在原目录');
     await expect(rules).toContainText('移动或改名后，暂需恢复原路径');
     await expect(rules).toContainText('同一篇文献错开编辑');
@@ -115,7 +115,7 @@ export async function vaultWorkflow({context,root,onPreview}) {
     const doc=(await selectedResponse.json()).document;
     await expect(picker).toHaveCount(0);
     const editor=page.getByRole('textbox',{name:'笔记',exact:true});await expect(editor).toBeVisible();
-    await expect(page.locator('.vault-note-rule')).toHaveText('正文可在两边编辑，批注由 Paperdesk 管理。');
+    await expect(page.locator('.vault-note-rule')).toHaveText('正文可在两边编辑，批注由 XiReader 管理。');
     await expect(page.getByLabel('PDF 第 1 页',{exact:true})).toBeVisible();
     await editor.fill('Paperdesk 初始理解');await page.getByRole('button',{name:'保存',exact:true}).click();
     await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到 Obsidian 仓库');
