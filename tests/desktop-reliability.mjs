@@ -145,7 +145,7 @@ async function reload() {
 async function annotationsTab() {
   const expand = page.getByRole('button', { name: '展开笔记面板', exact: true });
   if (await expand.count()) await expand.click();
-  await page.locator('.panel-tabs button').nth(1).click();
+  await page.getByRole('tab', { name: /^批注/ }).click();
 }
 async function openBook(book) {
   const expand = page.getByRole('button', { name: '展开文献栏', exact: true });
@@ -229,7 +229,7 @@ try {
     await annotationsTab(); await annotationCard().getByRole('button', { name: '编辑批注', exact: true }).click();
     const retained = 'Electron 切标签、切文献、刷新仍应保留的评论';
     await commentEditor().fill(retained);
-    await page.locator('.panel-tabs button').nth(0).click(); await annotationsTab(); await expect(commentEditor()).toHaveValue(retained);
+    await page.getByRole('tab', { name: '笔记', exact: true }).click(); await annotationsTab(); await expect(commentEditor()).toHaveValue(retained);
     await openBook(b); await annotationsTab(); await expect(page.getByRole('textbox', { name: '编辑批注内容', exact: true })).toHaveCount(0);
     await openBook(a); await annotationsTab(); await expect(commentEditor()).toHaveValue(retained);
     await reload(); await expect(currentPage(1)).toBeVisible(); await annotationsTab(); await expect(commentEditor()).toHaveValue(retained);

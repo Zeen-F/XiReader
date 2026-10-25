@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
+import { createEvidenceSnapshot } from '../shared/evidence-snapshot.mjs';
 import { mergeNotes, MAX_NOTE_LENGTH } from '../shared/notes.mjs';
 import { libraryIdentity, LAUNCHER_PROTOCOL, PRODUCT_VERSION, SERVICE_API_VERSION } from '../shared/service-identity.mjs';
 
@@ -93,7 +94,7 @@ function validPng(bytes) {
   } catch { return false; }
 }
 
-export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDocument, transaction, HttpError, objectBody, stringValue, pageValue, rectanglesValue }) {
+export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDocument, transaction, HttpError, objectBody, stringValue, pageValue, rectanglesValue, verifyEvidenceDocument }) {
   const instanceId = randomUUID();
   const libraryId = libraryIdentity(dataDir);
   const sessions = new Map();
@@ -150,17 +151,33 @@ export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDo
   });
   app.post('/api/reader-sessions/:sessionId', (req, res) => {
     const sessionId = uuidValue(req.params.sessionId, '阅读会话 ID');
-    const body = objectBody(req.body, ['documentId', 'page', 'selection', 'notesDirty', 'visible']);
+    const body = objectBody(req.body, ['documentId', 'page', 'selection', 'notesDirty', 'visible', 'expectedLibraryId', 'expectedPdfSha256', 'selectionId']);
+    if (body.expectedLibraryId !== undefined && body.expectedLibraryId !== libraryId) throw new HttpError(409, '文献库身份已改变，未共享选区。请刷新后重新核对。');
     const doc = documentOr404(uuidValue(body.documentId, '文献 ID'));
+    if (body.expectedPdfSha256 !== undefined && body.expectedPdfSha256 !== doc.sha256) throw new HttpError(409, '来源 PDF 的身份已改变，未共享选区。');
     const page = pageValue(body.page, doc.page_count);
     if (typeof body.notesDirty !== 'boolean' || typeof body.visible !== 'boolean') throw new HttpError(400, 'notesDirty 和 visible 必须是布尔值。');
     const selection = selectionValue(body.selection);
+    const selectionId = body.selectionId === undefined ? null : uuidValue(body.selectionId, '共享选区 ID');
+    prune();
+    let evidence = null;
+    if (selection && (body.expectedLibraryId !== undefined || body.expectedPdfSha256 !== undefined)) {
+      if (body.expectedLibraryId !== libraryId || body.expectedPdfSha256 !== doc.sha256) throw new HttpError(409, '共享选区需要完整核验文献库和 PDF 身份。');
+      try { evidence = createEvidenceSnapshot({ libraryId, document: serializeDocument(doc), selection: { ...selection, documentId: doc.id, page }, sessionId }); }
+      catch (error) { throw new HttpError(400, error.message); }
+      // Verify bytes on a new explicit selection, not on every unchanged heartbeat.
+      const previous = sessions.get(sessionId);
+      if (!selectionId || previous?.selectionId !== selectionId || !previous?.evidence || JSON.stringify(previous.evidence) !== JSON.stringify(evidence)) {
+        if (typeof verifyEvidenceDocument !== 'function') throw new HttpError(503, '来源校验暂不可用，选区未共享。');
+        verifyEvidenceDocument(doc);
+      }
+    }
     prune();
     if (!sessions.has(sessionId) && sessions.size >= MAX_SESSIONS) throw new HttpError(429, '最多同时连接 8 个阅读会话，请关闭其他窗口后重试。');
     const updatedAtMs = Date.now();
-    const session = { sessionId, documentId: doc.id, page, selection, notesDirty: body.notesDirty, visible: body.visible, updatedAtMs, updatedAt: new Date(updatedAtMs).toISOString() };
+    const session = { sessionId, documentId: doc.id, page, selection, selectionId, evidence, notesDirty: body.notesDirty, visible: body.visible, updatedAtMs, updatedAt: new Date(updatedAtMs).toISOString() };
     sessions.set(sessionId, session);
-    res.json({ session: summary(session), document: serializeDocument(doc) });
+    res.json({ session: summary(session), document: serializeDocument(doc), libraryId, evidence });
   });
   app.delete('/api/reader-sessions/:sessionId', (req, res) => {
     const sessionId = uuidValue(req.params.sessionId, '阅读会话 ID');
@@ -186,7 +203,11 @@ export function registerPluginApi({ app, db, dataDir, documentOr404, serializeDo
       if (!session) throw new HttpError(404, '没有活动阅读会话，请在 XiReader 打开文献后重试。');
     }
     const doc = documentOr404(session.documentId);
-    res.json({ ...summary(session), title: doc.title, selection: session.selection, notesDirty: session.notesDirty, notesRevision: notesRevision(doc) });
+    if (session.evidence) {
+      if (session.evidence.pdfSha256 !== doc.sha256) throw new HttpError(409, '来源 PDF 的身份已改变，已停止共享。');
+      verifyEvidenceDocument(doc);
+    }
+    res.json({ ...summary(session), libraryId, pdfSha256: doc.sha256, title: doc.title, selection: session.selection, evidence: session.evidence, notesDirty: session.notesDirty, notesRevision: notesRevision(doc) });
   });
   app.post('/api/documents/:id/notes/append', (req, res) => {
     const body = objectBody(req.body, ['text', 'expectedNotesRevision', 'page', 'requestId']);

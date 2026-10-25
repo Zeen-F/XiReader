@@ -346,7 +346,7 @@ async function main() {
     const saveNotes = async (page, base, id, notes, mode) => {
       const expand = page.getByRole('button', { name: '展开笔记面板', exact: true });
       if (await expand.isVisible()) await expand.click();
-      await page.locator('.panel-tabs').getByRole('button', { name: '笔记', exact: true }).click();
+      await page.getByRole('tab', { name: '笔记', exact: true }).click();
       const editor = page.getByRole('textbox', { name: '笔记', exact: true });
       await editor.fill(notes); await page.getByRole('button', { name: '保存', exact: true }).click();
       await expect(page.locator('.save-row [role="status"]')).toHaveText(mode === 'vault' ? '已保存到 Obsidian 仓库' : '已保存到本机');

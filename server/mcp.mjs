@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { renderEvidenceReaderTemplate } from '../shared/evidence-snapshot.mjs';
 import { mergeNotes, MAX_NOTE_LENGTH } from '../shared/notes.mjs';
 import { validateSearchGrant, searchAllowed, searchPage } from './mcp-search.mjs';
 import { THEME_IDS } from '../shared/library.mjs';
@@ -29,7 +30,7 @@ class BridgeError extends Error {
   constructor(message, status, sessions, category) { super(message); this.status = status; this.sessions = sessions; this.category = category; }
 }
 function pick(value, keys) { return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]])); }
-function metadata(doc) { return pick(doc, ['id', 'title', 'filename', 'pageCount', 'lastPage', 'textAvailable', 'byteSize', 'createdAt', 'updatedAt', 'folderId']); }
+function metadata(doc) { return pick(doc, ['id', 'title', 'filename', 'pageCount', 'pdfSha256', 'lastPage', 'textAvailable', 'byteSize', 'createdAt', 'updatedAt', 'folderId']); }
 function textResult(value) { return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; }
 // Display-only data stays in the component. Never put page images, notes or
 // directory text in content/structuredContent just to make the UI work.
@@ -139,7 +140,7 @@ export function createPaperdeskMcpServer(rawProfile, { readProfile } = {}) {
     sessionId: id.optional(),
   }, async ({ sessionId }) => {
     const raw = await fetchJson(`/api/reader-context${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`);
-    const context = pick(raw, ['sessionId', 'documentId', 'title', 'page', 'notesDirty', 'updatedAt', 'notesRevision']);
+    const context = pick(raw, ['sessionId', 'libraryId', 'documentId', 'pdfSha256', 'title', 'page', 'notesDirty', 'updatedAt', 'notesRevision', 'evidence']);
     context.selection = null;
     let image;
     if (raw.selection) {
@@ -281,9 +282,10 @@ export function createPaperdeskMcpServer(rawProfile, { readProfile } = {}) {
   }).strict().nullable();
   tool('paperdesk_reader_session', '更新阅读会话', 'Component-only transient reader heartbeat. Selection stays null until the user explicitly confirms its preview. Bind updates to the component UUID; never substitute another browser session.', {
     sessionId: id, documentId: id, page: pageNumber, selection: selectionSchema, notesDirty: z.boolean(), visible: z.boolean(),
+    expectedLibraryId: revision.optional(), expectedPdfSha256: revision.optional(), selectionId: id.optional(),
   }, async ({ sessionId, ...body }) => {
     const result = await fetchJson(`/api/reader-sessions/${sessionId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return appResult('session', { ...result.session, notesRevision: result.document.notesRevision });
+    return appResult('session', { ...result.session, libraryId: result.libraryId, pdfSha256: result.document.pdfSha256, evidence: result.evidence, notesRevision: result.document.notesRevision });
   }, { write: true, meta: appMeta });
   tool('paperdesk_reader_close', '关闭阅读会话', 'Component-only session teardown. Removes transient shared selection and draft-state heartbeat; does not delete documents or saved notes.', { sessionId: id }, async ({ sessionId }) => {
     await fetchJson(`/api/reader-sessions/${sessionId}`, { method: 'DELETE' });
@@ -299,8 +301,7 @@ export function createPaperdeskMcpServer(rawProfile, { readProfile } = {}) {
   server.registerResource('paperdesk_reader', READER_RESOURCE, { title: 'XiReader 阅读器（实验性）', mimeType: MIME, _meta: uiMeta }, async () => {
     await verify();
     const template = await readFile(new URL('../plugins/paperdesk/ui/reader.html', import.meta.url), 'utf8');
-    const config = JSON.stringify({ baseUrl: profile.baseUrl }).replaceAll('<', '\\u003c');
-    return { contents: [{ uri: READER_RESOURCE, mimeType: MIME, text: template.replace('__PAPERDESK_CONFIG__', config), _meta: uiMeta }] };
+    return { contents: [{ uri: READER_RESOURCE, mimeType: MIME, text: renderEvidenceReaderTemplate(template, { baseUrl: profile.baseUrl, libraryId: profile.libraryId }), _meta: uiMeta }] };
   });
   return server;
 }

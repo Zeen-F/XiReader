@@ -22,6 +22,8 @@ import { listVaultPdfs } from './vault-pdfs.mjs';
 import { pdfAssetPaths } from '../shared/pdf-assets.mjs';
 import { registerKnowledgeExport } from './knowledge-export.mjs';
 import { createSearchIndex } from './search-index.mjs';
+import { registerThreadsApi, verifyDiscussionPdf } from './threads.mjs';
+import { libraryIdentity } from '../shared/service-identity.mjs';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
 const MAX_PAGES = 2000;
@@ -229,6 +231,16 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   const vaultConfig = vaultDir ? getVaultConfig({ vaultDir, vaultSubdir, dataDir: dataDir || process.env.PAPERDESK_DATA_DIR }) : null;
   dataDir = vaultConfig?.dataDir || dataDir || process.env.PAPERDESK_DATA_DIR || path.join(rootDir, 'data');
   dataDir = path.resolve(dataDir);
+  const libraryId = libraryIdentity(vaultConfig?.libraryDir || dataDir);
+  function expectedLibrary(value) {
+    if (value === undefined) return;
+    if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) throw new HttpError(400, '请提供有效的文献库身份。');
+    if (value !== libraryId) {
+      const error = new HttpError(409, '当前文献库已切换，请回到原文献库核对草稿；本次内容未读写。');
+      error.code = 'LIBRARY_IDENTITY_MISMATCH';
+      throw error;
+    }
+  }
   const vaultStore = vaultConfig ? createVaultStore({ vaultDir: vaultConfig.vaultDir, subdir: vaultConfig.vaultSubdir, recoveryDir: path.join(dataDir,'recoveries','originals') }) : null;
   const pdfDir = vaultStore?.pdfDir || path.join(dataDir, 'pdfs');
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -416,7 +428,14 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   const pluginApi = registerPluginApi({
     app, db, dataDir: vaultConfig?.libraryDir || dataDir, documentOr404, serializeDocument, transaction,
     HttpError, objectBody, stringValue, pageValue, rectanglesValue,
+    verifyEvidenceDocument: doc => verifyDiscussionPdf(doc, documentPdfPath(doc), HttpError),
   });
+  let discussionStore;
+  try {
+    discussionStore = registerThreadsApi({ app, db, dataDir, vaultStore, libraryId, documentOr404,
+      verifyDocument: doc => verifyDiscussionPdf(doc, documentPdfPath(doc), HttpError),
+      HttpError, objectBody, uuidValue, stringValue, pageValue });
+  } catch (error) { pluginApi.close(); db.close(); throw error; }
   registerLibraryApi({ app, db, documentOr404, serializeDocument, transaction, HttpError, objectBody });
   registerBookmarksApi({ app, db, documentOr404, transaction, HttpError, objectBody, uuidValue, pageValue });
   registerKnowledgeExport({ app, vaultStore, documentOr404, HttpError, objectBody, stringValue, uuidValue, pageValue, rectanglesValue });
@@ -465,9 +484,10 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
     res.json({ uri: `obsidian://open?path=${encodeURIComponent(vaultStore.notePath(req.params.id))}` });
   });
   app.post('/api/documents/:id/vault-conflict', (req,res) => {
+    const { text, expectedLibraryId } = objectBody(req.body,['text', 'expectedLibraryId']);
+    expectedLibrary(expectedLibraryId);
     documentOr404(req.params.id);
     if (!vaultIndex) throw new HttpError(400,'当前未连接 Obsidian 仓库。');
-    const { text } = objectBody(req.body,['text']);
     vaultIndex.preserveConflict(req.params.id,stringValue(text,'冲突笔记',MAX_NOTE_LENGTH));
     res.json({ preserved: true });
   });
@@ -547,7 +567,15 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   });
 
   app.get('/api/documents/:id', (req, res) => {
-    res.json({ document: serializeDocument(documentOr404(req.params.id)), annotations: findAnnotations.all(req.params.id).map(serializeAnnotation) });
+    expectedLibrary(req.query.expectedLibraryId);
+    const doc = documentOr404(req.params.id);
+    if (Object.hasOwn(req.query, 'expectedPdfSha256')) {
+      if (!req.query.expectedLibraryId) throw new HttpError(400, '核对 PDF 来源时必须同时提供文献库身份。');
+      revisionValue(req.query.expectedPdfSha256, HttpError);
+      if (req.query.expectedPdfSha256 !== doc.sha256) throw new HttpError(409, 'PDF 来源版本已变化，请重新核对原文献。');
+      verifyDiscussionPdf(doc, documentPdfPath(doc), HttpError);
+    }
+    res.json({ document: serializeDocument(doc), annotations: findAnnotations.all(req.params.id).map(serializeAnnotation) });
   });
   app.get('/api/documents/:id/file', (req, res, next) => {
     const doc = documentOr404(req.params.id);
@@ -592,12 +620,13 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
     }
   });
   app.patch('/api/documents/:id', (req, res) => {
-    const body = objectBody(req.body, ['title', 'notesZh', 'notesEn', 'lastPage', 'expectedNotesRevision', 'positionWriterId', 'positionSequence']);
+    const body = objectBody(req.body, ['title', 'notesZh', 'notesEn', 'lastPage', 'expectedNotesRevision', 'positionWriterId', 'positionSequence', 'expectedLibraryId']);
+    expectedLibrary(body.expectedLibraryId);
     if (Object.hasOwn(body, 'expectedNotesRevision')) revisionValue(body.expectedNotesRevision, HttpError);
     const sequencedPosition = Object.hasOwn(body, 'positionWriterId') || Object.hasOwn(body, 'positionSequence');
     let writerId, sequence, positionStale = false, positionReplayed = false;
     if (sequencedPosition) {
-      if (!Object.hasOwn(body, 'lastPage') || Object.keys(body).some(key => !['lastPage', 'positionWriterId', 'positionSequence'].includes(key))) {
+      if (!Object.hasOwn(body, 'lastPage') || Object.keys(body).some(key => !['lastPage', 'positionWriterId', 'positionSequence', 'expectedLibraryId'].includes(key))) {
         throw new HttpError(400, '带序号的阅读位置请求只能包含 lastPage、positionWriterId 和 positionSequence。');
       }
       writerId = uuidValue(body.positionWriterId, '阅读窗口');
@@ -605,7 +634,7 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
     }
     const document = transaction(() => {
       const doc = documentOr404(req.params.id);
-      if (!Object.keys(body).some(key => key !== 'expectedNotesRevision')) return serializeDocument(doc);
+      if (!Object.keys(body).some(key => !['expectedNotesRevision', 'expectedLibraryId'].includes(key))) return serializeDocument(doc);
       const changesNotes = Object.hasOwn(body, 'notesZh') || Object.hasOwn(body, 'notesEn');
       if (vaultIndex && changesNotes && !Object.hasOwn(body,'expectedNotesRevision')) throw new HttpError(400,'保存到 Obsidian 仓库需要笔记版本，请先读取当前笔记后重试。');
       if (vaultIndex && Object.hasOwn(body,'notesEn') && body.notesEn !== '') throw new HttpError(400,'Obsidian 仓库使用统一 Markdown 正文，请把内容保存到 notesZh，并将 notesEn 留空。');
@@ -783,7 +812,7 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
     if (error instanceof SyntaxError && error.status === 400) return res.status(400).json({ error: 'JSON 格式不正确。' });
     if (error instanceof HttpError || (error.name === 'VaultError' && error.status === 409)) {
       const payload = { error: error.message };
-      if (['NOTES_VERSION_CONFLICT', 'VAULT_FILE_CONFLICT'].includes(error.code)) {
+      if (['NOTES_VERSION_CONFLICT', 'VAULT_FILE_CONFLICT', 'LIBRARY_IDENTITY_MISMATCH', 'DISCUSSION_SAVE_UNCERTAIN'].includes(error.code)) {
         payload.code = error.code;
         if (error.conflictPreserved === true) payload.conflictPreserved = true;
       }
@@ -813,7 +842,7 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
           if (failures.length) throw new AggregateError(failures.map(result => result.reason), '本机阅读资源未能完整关闭。');
         } finally {
           tocCache.clear();
-          db.close();
+          try { discussionStore.close(); } finally { db.close(); }
         }
       })();
       return closing;
