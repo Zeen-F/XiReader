@@ -673,9 +673,22 @@ export function createVaultStore({ vaultDir, subdir = 'Paperdesk', recoveryDir }
         return saved;
       });
     }
+    function codexPath(id) {
+      uuid(id); const file = path.join(rootDir, 'CodexConversations', `${id}.json`);
+      checkedPath(canonical,file,{missing:true}); return file;
+    }
+    function readCodexConversations(id) { return guard(() => markdown(codexPath(id),true)); }
+    function writeCodexConversations(id,source,expectedToken) {
+      return guard(() => {
+        readLibrary(); ensureDirectory(path.join(rootDir,'CodexConversations'));
+        const file=codexPath(id), token=replaceMarkdown(file,source,expectedToken), saved=markdown(file);
+        if(saved.token!==token||saved.source!==source)invalid('Codex 会话读回核验失败，请保留输入。');
+        return saved;
+      });
+    }
     return { vaultDir: canonical, rootDir, pdfDir, notePath, pdfPath, readAll, readDocument, readPdfSnapshot,
       writeDocument, writeConflict, readLibrary, writeLibrary, importPdf, discardImportedPdf, discardNewDocument,
-      readDiscussions, writeDiscussions,
+      readDiscussions, writeDiscussions, readCodexConversations, writeCodexConversations,
       inspectPdfSource: source => guard(() => ({ ...inspectPdf(sourcePath(source)), pdfSource: { ...source } })),
       rollbackDocument: (previousRecord, expectedToken) => writeDocument(previousRecord, expectedToken) };
   });

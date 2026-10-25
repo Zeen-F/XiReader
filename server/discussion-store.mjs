@@ -7,8 +7,8 @@ export const MAX_DISCUSSION_BYTES = 8 * 1024 * 1024;
 /** Standalone SQLite is authoritative. In vault mode it is only a projection:
  * successful sidecar writes survive even a later SQLite failure and replay by
  * requestId on the next read. No note/frontmatter or original PDF is changed. */
-export function createDiscussionStore({ dataDir, vaultStore, validate, HttpError }) {
-  const filename = path.join(dataDir, 'discussions.sqlite');
+export function createDiscussionStore({ dataDir, vaultStore, validate, HttpError, databaseName = 'discussions.sqlite', emptyState = id => ({ schemaVersion:1, documentId:id, threads:[], requests:[] }) }) {
+  const filename = path.join(dataDir, databaseName);
   try {
     const stat = lstatSync(filename);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('讨论数据库必须是普通文件，不能使用符号链接。');
@@ -41,10 +41,10 @@ export function createDiscussionStore({ dataDir, vaultStore, validate, HttpError
   };
   function load(id) {
     const cached = get.get(id);
-    if (!vaultStore) return { state: cached ? parse(cached.state,id) : { schemaVersion:1, documentId:id, threads:[], requests:[] }, token:null };
+    if (!vaultStore) return { state: cached ? parse(cached.state,id) : emptyState(id), token:null };
     const saved = vaultStore.readDiscussions(id);
     if (!saved && cached) throw new HttpError(409,'已保存的讨论文件缺失，请恢复 Discussions 中的原文件；没有创建空讨论覆盖历史。');
-    return { state: saved ? parse(saved.source,id) : { schemaVersion:1, documentId:id, threads:[], requests:[] }, token:saved?.token ?? null };
+    return { state: saved ? parse(saved.source,id) : emptyState(id), token:saved?.token ?? null };
   }
   function transact(id, work) {
     db.exec('BEGIN IMMEDIATE');

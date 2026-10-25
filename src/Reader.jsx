@@ -15,7 +15,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 const FALLBACK_PAGE = { width: 612, height: 792 };
 const endpointLayer = node => (node?.nodeType === 1 ? node : node?.parentElement)?.closest('.pdf-paper .textLayer');
 
-export default function Reader({ document, page, onPage, annotations, selection, onSelection, selectionLocked: externalSelectionLocked, find, focusedAnnotation, sourceFocus, onDismissSource, historyState, onHistory, focusTick, tocOpen, onToggleToc, onBookmarkStateChange }) {
+export default function Reader({ readingSnapshotRef, document, page, onPage, annotations, selection, onSelection, selectionLocked: externalSelectionLocked, find, focusedAnnotation, sourceFocus, onDismissSource, historyState, onHistory, focusTick, tocOpen, onToggleToc, onBookmarkStateChange }) {
   const [displayOpen, setDisplayOpen] = useState(false);
   const displayButton = useRef(null);
   const [preferences, setPreferences] = useState(readDisplayPreferences);
@@ -36,7 +36,7 @@ export default function Reader({ document, page, onPage, annotations, selection,
   const historyViewports = useRef(new Map()), pendingViewport = useRef(null), previousHistoryIndex = useRef(historyState?.index);
   const positionKey = JSON.stringify([historyState?.index, document.id, page, sourceFocus?.captureId, focusedAnnotation, find]);
   const latest = useRef(null);
-  latest.current = { documentId: document.id, page, onPage, onSelection, selection, selectionLocked, regionMode, mode, count, pageCount: document.pageCount, positionKey };
+  latest.current = { documentId: document.id, pdfSha256: document.pdfSha256, page, onPage, onSelection, selection, selectionLocked, regionMode, mode, count, pageCount: document.pageCount, positionKey };
   const currentStart = groupStart(page, count), currentIndex = (currentStart - 1) / count;
   const groups = useMemo(() => Array.from({ length: Math.ceil(document.pageCount / count) }, (_, index) => groupGeometry({
     start: index * count + 1, pageCount: document.pageCount, count, zoom,
@@ -165,6 +165,27 @@ export default function Reader({ document, page, onPage, annotations, selection,
     const quote = readPdfSelection(layer, paper, native);
     return { result: quote ? { documentId: latest.current.documentId, page: number, kind: 'text', ...quote } : null, crossPage: false };
   }, []);
+  useLayoutEffect(() => {
+    if(!readingSnapshotRef)return;
+    const capture=()=>{
+      const state=latest.current,root=scrollRef.current;
+      if(!root||!tiles.current.get(state.page)?.ready||tiles.current.get(state.page)?.documentId!==state.documentId)throw new Error('当前页面尚未完成渲染，请稍候核对。');
+      const bounds=root.getBoundingClientRect(),visible=[];
+      for(const [number,tile] of tiles.current){
+        if(!tile.ready||tile.documentId!==state.documentId)continue;
+        const rect=tile.paper.getBoundingClientRect(),left=Math.max(bounds.left,rect.left),top=Math.max(bounds.top,rect.top),right=Math.min(bounds.right,rect.right),bottom=Math.min(bounds.bottom,rect.bottom);
+        if(right<=left||bottom<=top||rect.width<=0||rect.height<=0)continue;
+        const round=value=>Math.round(value*10000)/10000;
+        visible.push({page:number,rect:{x:round((left-rect.left)/rect.width),y:round((top-rect.top)/rect.height),width:round(round((right-rect.left)/rect.width)-round((left-rect.left)/rect.width)),height:round(round((bottom-rect.top)/rect.height)-round((top-rect.top)/rect.height))}});
+      }
+      const nativeSelection=getPdfSelection();
+      if(nativeSelection.crossPage)throw new Error('当前选区跨页，请清除或重新选择同一页的文字。');
+      const selected=nativeSelection.result||state.selection;
+      return{documentId:state.documentId,pdfSha256:state.pdfSha256,capturedAt:Date.now(),page:state.page,visible:visible.sort((a,b)=>Math.abs(a.page-state.page)-Math.abs(b.page-state.page)).slice(0,3),selection:selected?.documentId===state.documentId?{documentId:selected.documentId,page:selected.page,kind:selected.kind,quote:selected.quote||''}:null};
+    };
+    readingSnapshotRef.current=capture;
+    return()=>{if(readingSnapshotRef.current===capture)readingSnapshotRef.current=null;};
+  },[readingSnapshotRef,getPdfSelection,document.id]);
   useEffect(() => {
     const owner = window.document;
     const capture = () => {
@@ -172,6 +193,7 @@ export default function Reader({ document, page, onPage, annotations, selection,
       if (latest.current.selectionLocked || latest.current.regionMode) return;
       const { result, crossPage } = getPdfSelection();
       setSelectionError(crossPage ? '请在同一页内选择文字。跨页选区不能保存为批注。' : '');
+      if(!result&&owner.activeElement?.closest?.('.codex-chat')&&!crossPage)return;
       acceptSelection(result);
     };
     const schedule = () => { cancelAnimationFrame(selectionFrame.current); selectionFrame.current = requestAnimationFrame(capture); };

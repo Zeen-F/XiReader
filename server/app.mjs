@@ -24,6 +24,7 @@ import { registerKnowledgeExport } from './knowledge-export.mjs';
 import { createSearchIndex } from './search-index.mjs';
 import { registerThreadsApi, verifyDiscussionPdf } from './threads.mjs';
 import { libraryIdentity } from '../shared/service-identity.mjs';
+import { registerCodexApi } from './codex-api.mjs';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
 const MAX_PAGES = 2000;
@@ -227,7 +228,7 @@ function localRequestOnly(req, res, next) {
 function markdownText(text) { return text.replace(/[\\`*_{}\[\]<>#!|~]/g, '\\$&'); }
 function blockquote(text) { return text.split(/\r?\n/).map((line) => `> ${markdownText(line)}`).join('\n'); }
 /** Create a local app with its own persistent database. The caller owns its HTTP server. */
-export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR, vaultSubdir = process.env.PAPERDESK_VAULT_SUBDIR || 'Paperdesk', translationOptions } = {}) {
+export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR, vaultSubdir = process.env.PAPERDESK_VAULT_SUBDIR || 'Paperdesk', translationOptions, codexOptions } = {}) {
   const vaultConfig = vaultDir ? getVaultConfig({ vaultDir, vaultSubdir, dataDir: dataDir || process.env.PAPERDESK_DATA_DIR }) : null;
   dataDir = vaultConfig?.dataDir || dataDir || process.env.PAPERDESK_DATA_DIR || path.join(rootDir, 'data');
   dataDir = path.resolve(dataDir);
@@ -436,6 +437,9 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
       verifyDocument: doc => verifyDiscussionPdf(doc, documentPdfPath(doc), HttpError),
       HttpError, objectBody, uuidValue, stringValue, pageValue });
   } catch (error) { pluginApi.close(); db.close(); throw error; }
+  const codexApi = registerCodexApi({ app, db, dataDir, vaultStore, libraryId, documentOr404,
+    verifyDocument: doc => verifyDiscussionPdf(doc, documentPdfPath(doc), HttpError),
+    HttpError, objectBody, uuidValue, options: codexOptions });
   registerLibraryApi({ app, db, documentOr404, serializeDocument, transaction, HttpError, objectBody });
   registerBookmarksApi({ app, db, documentOr404, transaction, HttpError, objectBody, uuidValue, pageValue });
   registerKnowledgeExport({ app, vaultStore, documentOr404, HttpError, objectBody, stringValue, uuidValue, pageValue, rectanglesValue });
@@ -833,6 +837,7 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
           // Keep SQLite open until every admitted import and TOC task settles.
           const [resources] = await Promise.all([
             Promise.allSettled([
+              Promise.resolve().then(() => codexApi.close()),
               Promise.resolve().then(() => translationApi.close()),
               Promise.resolve().then(() => readerRenderer.close()),
             ]),
