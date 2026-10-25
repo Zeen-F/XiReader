@@ -1,3 +1,4 @@
+import { fetch } from './fetch.mjs';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { access, mkdir, open, realpath, stat } from 'node:fs/promises';
@@ -21,12 +22,12 @@ export function readerRuntimeEnvironment(dataDir, inherited = process.env) {
 
 // Starting a daemon is opt-in in the local profile. Reuse a matching service;
 // never terminate an occupant, create a new library, or start another data path.
-export async function ensureReaderRuntime(rawProfile) {
+export async function ensureReaderRuntime(rawProfile, { fetchImpl = fetch } = {}) {
   const profile = validatePluginProfile(rawProfile);
   async function probe() {
     let response;
     try {
-      response = await fetch(`${profile.baseUrl}/api/plugin/status`, { redirect: 'error', signal: AbortSignal.timeout(1500) });
+      response = await fetchImpl(`${profile.baseUrl}/api/plugin/status`, { redirect: 'error', signal: AbortSignal.timeout(1500) });
     } catch (error) {
       if (refused(error)) return false;
       throw new Error('无法核对阅读服务；请检查本机地址和服务状态。');

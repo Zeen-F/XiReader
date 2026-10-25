@@ -1,3 +1,4 @@
+import { fetch } from '../server/fetch.mjs';
 import { readAppearance } from './appearance.mjs';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { randomUUID } from 'node:crypto';

@@ -1,3 +1,4 @@
+import { fetch } from '../server/fetch.mjs';
 import { createServer } from 'node:http';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
