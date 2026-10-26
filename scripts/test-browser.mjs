@@ -22,6 +22,8 @@ import { sourceNavigationWorkflow } from '../tests/source-navigation.browser.mjs
 import { readerUiRefinementWorkflow } from '../tests/reader-ui-refinement.browser.mjs';
 import { shanlanWorkflow } from '../tests/shanlan.browser.mjs';
 import { waitForImportReady } from '../tests/browser-import.mjs';
+import { noteDraftLibraryWorkflow } from '../tests/note-drafts.browser.mjs';
+import { readingWorkspaceWorkflow } from '../tests/reading-workspace.browser.mjs';
 import { testEvidenceDirectory } from './desktop-test-support.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -76,6 +78,7 @@ async function readingWorkflow(context) {
   page.on('pageerror', error => pageErrors.push(`Reading app: ${error.message}`));
   const base = `http://127.0.0.1:${appServer.address().port}`;
   const library = await (await fetch(`${base}/api/documents`)).json();
+  const { libraryId } = await (await fetch(`${base}/api/plugin/status`)).json();
   assert.deepEqual(library.documents, [], 'Browser tests must begin with an isolated empty library');
   await page.goto(base);
   await waitForImportReady(page);
@@ -108,7 +111,9 @@ async function readingWorkflow(context) {
   assert.ok(exported.includes('reading-demo.pdf'), 'Export must identify the imported source');
 
   // Reload after a successful save, with no recovery draft masking server persistence.
-  assert.equal(await page.evaluate(id => localStorage.getItem(`paperdesk-draft-${id}`), document.id), null);
+  const draftScope = `${encodeURIComponent(libraryId)}:${encodeURIComponent(document.id)}:`;
+  assert.equal(await page.evaluate(key => sessionStorage.getItem(key), `paperdesk-note-draft-slot-v2:${draftScope}`), 'saved');
+  assert.deepEqual(await page.evaluate(prefix => Object.keys(localStorage).filter(key => key.startsWith(prefix)), `paperdesk-note-draft-v2:${draftScope}`), []);
   await page.reload();
   await expect(editor).toHaveValue(notes);
   saved = (await (await fetch(`${base}/api/documents/${document.id}`)).json()).document;
@@ -204,27 +209,33 @@ async function legacyNotesWorkflow(context, sampleDocument) {
       sessionStorage.setItem(seedKey, 'true');
     }
   }, { key: draftKey, value: draft });
+  const legacyBefore = JSON.stringify(draft), writesBeforeRecovery = noteWrites.length;
   await page.reload();
-  await expect(editor).toHaveValue(draftValue);
-  await expect(page.locator('.notes-conflict')).toBeVisible();
-  raw = await readDocument();
-  assert.equal(raw.notesZh, edited, 'An old draft without a base revision must not overwrite newer saved notes');
-  await page.getByRole('button', { name: '保留草稿并载入已保存笔记', exact: true }).click();
   await expect(editor).toHaveValue(edited);
-  await page.locator('.preserved-drafts summary').click();
-  await expect(page.getByRole('textbox', { name: '保留的笔记草稿 1', exact: true })).toHaveValue(draftValue);
-  // Choosing this recovered text in the editor is now an explicit edit, with
-  // the current saved revision as its base and the old draft archived safely.
+  await expect(page.locator('.notes-conflict')).toHaveCount(0);
+  await page.locator('.legacy-drafts summary').click();
+  await expect(page.getByRole('textbox', { name: '旧版待核对笔记草稿 1', exact: true })).toHaveValue(draftValue);
+  await expect(page.locator('.legacy-drafts')).toContainText('可能来自另一个库');
+  assert.equal(await page.locator('.legacy-drafts textarea').evaluateAll(fields => fields.every(field => field.readOnly)), true);
+  raw = await readDocument();
+  assert.equal(raw.notesZh, edited, 'An unscoped old draft never enters the editor or overwrites the current library');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到本机');
+  assert.equal(noteWrites.length, writesBeforeRecovery, 'Viewing and no-op saving must not submit legacy candidates');
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), draftKey), legacyBefore);
+  // Explicitly choosing the read-only candidate is a new edit against the
+  // current library revision. Keep the original candidate for later recovery.
   await editor.fill(draftValue);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到本机');
   raw = await readDocument();
   assert.equal(raw.notesZh, draftValue);
   assert.equal(raw.notesEn, '');
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), draftKey), null);
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), draftKey), legacyBefore);
   await page.reload();
   await expect(editor).toHaveValue(draftValue);
-  console.log('PASS: legacy fields without writes, edit consolidation and unknown-base draft conflict/recovery without duplication');
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), draftKey), legacyBefore);
+  console.log('PASS: legacy fields without writes, read-only unscoped draft review, explicit recovery and original bytes preserved');
   await page.close();
 }
 
@@ -301,8 +312,9 @@ async function tableOfContentsWorkflow(context, sampleDocument) {
   await chapterExpanded(navigation, '2 Methods');
   await expect(navigation.getByRole('button', { name: '2.1 Results，PDF 第 5 页', exact: true })).toBeVisible();
 
-  // A small reading window dismisses the overlaid contents after navigation.
-  await page.setViewportSize({ width: 900, height: 900 });
+  // Exercise the reader container overlay breakpoint (700px). The new single
+  // auxiliary layout no longer subtracts library/notes widths at 900px.
+  await page.setViewportSize({ width: 680, height: 900 });
   await navigation.getByRole('button', { name: '1 Introduction，PDF 第 2 页', exact: true }).click();
   await expect(page.getByLabel('PDF 第 2 页', { exact: true })).toBeVisible();
   await expect(navigation).not.toBeVisible();
@@ -316,13 +328,15 @@ async function tableOfContentsWorkflow(context, sampleDocument) {
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(navigation).toBeVisible();
   await expect(notesPanel).not.toBeVisible();
+  await page.getByRole('button', { name: '展开文献栏', exact: true }).click();
+  await expect(navigation).not.toBeVisible();
   await page.getByRole('textbox', { name: '全文搜索', exact: true }).fill('浏览器验收');
   await page.locator('.search-result').filter({ hasText: '笔记' }).click();
   await expect(notesPanel).toBeVisible();
   await expect(navigation).not.toBeVisible();
   await expect(page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue(/浏览器验收/);
-  await page.getByRole('textbox', { name: '全文搜索', exact: true }).fill('');
   await page.setViewportSize({ width: 1800, height: 1000 });
+  await page.getByRole('textbox', { name: '全文搜索', exact: true }).fill('');
 
   // The original sample was imported before any TOC access. It must not inherit
   // a previous document's entries or require reimport after this feature.
@@ -574,6 +588,7 @@ async function scanRegionWorkflow(context) {
   await page.setViewportSize({ width: 760, height: 900 });
   const tocToggle = page.getByRole('button', { name: /^(展开|收起)目录$/ });
   if (await tocToggle.getAttribute('aria-expanded') === 'false') await tocToggle.click();
+  await page.getByRole('button', { name: '展开文献栏', exact: true }).click();
   await search.fill('区域反向拖选验收');
   await page.locator('.search-result').filter({ hasText: '批注' }).click();
   const notesPanel = page.getByRole('complementary', { name: '笔记与批注', exact: true });
@@ -609,6 +624,7 @@ try {
   await selectionRegression(context);
   const sampleDocument = await readingWorkflow(context);
   await legacyNotesWorkflow(context, sampleDocument);
+  await noteDraftLibraryWorkflow({ context });
   await tableOfContentsWorkflow(context, sampleDocument);
   await largeUploadWorkflow(context);
   await scanRegionWorkflow(context);
@@ -644,6 +660,7 @@ try {
   await mkdir(sourceVisualDir,{recursive:true,mode:0o700});
   await sourceNavigationWorkflow({context,onPreview:(page,label)=>page.screenshot({path:join(sourceVisualDir,`${label}.png`),fullPage:true,animations:'disabled'})});
   await readerUiRefinementWorkflow({context,base:`http://127.0.0.1:${appServer.address().port}`,onPreview:(page,label)=>page.screenshot({path:join(sourceVisualDir,`${label}.png`),fullPage:true,animations:'disabled'})});
+  await readingWorkspaceWorkflow({context,base:`http://127.0.0.1:${appServer.address().port}`,onPreview:(page,label)=>page.screenshot({path:join(sourceVisualDir,`${label}.png`),fullPage:true,animations:'disabled'})});
   assert.deepEqual(pageErrors, [], 'Browser pages must not raise uncaught exceptions');
   console.log('Browser checks passed; temporary library removed on exit.');
 } catch (error) {

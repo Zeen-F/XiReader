@@ -41,7 +41,7 @@ module.exports = {
     identity: null,
     hardenedRuntime: false,
     notarize: false,
-    extendInfo: { CFBundleDisplayName: '纸间 Paperdesk' },
+    extendInfo: { CFBundleDisplayName: 'XiReader' },
   },
   win: {
     target: [{ target: 'portable', arch: ['x64'] }],
@@ -54,7 +54,7 @@ module.exports = {
   },
   dmg: {
     sign: false,
-    title: 'Paperdesk ${version}',
+    title: 'XiReader ${version}',
     window: { width: 540, height: 360 },
     contents: [
       { x: 150, y: 170, type: 'file' },

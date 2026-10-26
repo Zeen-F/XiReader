@@ -1,3 +1,4 @@
+import { fetch } from '../server/fetch.mjs';
 import { readAppearance } from './appearance.mjs';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
@@ -70,7 +71,7 @@ function flushNotes() {
 
 async function showError(message, error) {
   const options = {
-    type: 'error', title: '纸间 Paperdesk', message,
+    type: 'error', title: 'XiReader', message,
     detail: error?.message || '请检查文献库权限与磁盘空间后重试。', buttons: ['知道了'],
   };
   if (window && !window.isDestroyed()) await dialog.showMessageBox(window, options);
@@ -128,10 +129,10 @@ async function chooseLibrary(vaultMode = false) {
 
 function updateMenu() {
   const application = {
-    label: 'Paperdesk', submenu: [
-      { role: 'about', label: '关于纸间 Paperdesk' },
-      ...(isMac ? [{ type: 'separator' }, { role: 'hide', label: '隐藏纸间' }, { role: 'hideOthers', label: '隐藏其他' }, { role: 'unhide', label: '显示全部' }] : []),
-      { type: 'separator' }, { role: 'quit', label: '退出纸间', accelerator: 'CmdOrCtrl+Q' },
+    label: 'XiReader', submenu: [
+      { role: 'about', label: '关于 XiReader' },
+      ...(isMac ? [{ type: 'separator' }, { role: 'hide', label: '隐藏 XiReader' }, { role: 'hideOthers', label: '隐藏其他' }, { role: 'unhide', label: '显示全部' }] : []),
+      { type: 'separator' }, { role: 'quit', label: '退出 XiReader', accelerator: 'CmdOrCtrl+Q' },
     ],
   };
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -153,7 +154,7 @@ function updateMenu() {
 
 function createWindow() {
   window = new BrowserWindow({
-    title: desktopPreview ? '纸间 · 山岚 V2 预览' : dailyShanlan ? '纸间 · 山岚 V2' : '纸间 Paperdesk', width: 1440, height: 960, minWidth: 780, minHeight: 560, show: false,
+    title: desktopPreview ? 'XiReader · 山岚 V2 预览' : dailyShanlan ? 'XiReader · 山岚 V2' : 'XiReader', width: 1440, height: 960, minWidth: 780, minHeight: 560, show: false,
     backgroundColor: '#f5f1e8',
     webPreferences: {
       preload: path.join(desktopDir, 'preload.cjs'), contextIsolation: true,
@@ -233,14 +234,14 @@ if (!app.requestSingleInstanceLock()) {
     const preferredPort = process.env.PAPERDESK_DESKTOP_PORT === undefined ? (settings?.port || (desktopPreview ? 0 : 4317)) : Number(process.env.PAPERDESK_DESKTOP_PORT);
     runtime = await startDesktopRuntime({ dataDir, preferredPort, vaultDir: settings?.vaultDir, vaultSubdir: settings?.vaultSubdir });
     await writeDesktopSettings(userData, { dataDir: runtime.dataDir, vaultDir: runtime.vaultDir, vaultSubdir: runtime.vaultSubdir, port: Number(new URL(runtime.baseUrl).port) });
-    app.setAboutPanelOptions({ applicationName: '纸间 Paperdesk', applicationVersion: app.getVersion(), version: `${isMac ? 'macOS' : 'Windows'} 桌面预览版`, copyright: 'PDF、笔记与批注保存在本机。' });
+    app.setAboutPanelOptions({ applicationName: 'XiReader', applicationVersion: app.getVersion(), version: `${isMac ? 'macOS' : 'Windows'} 桌面预览版`, copyright: 'PDF、笔记与批注保存在本机。' });
     updateMenu();
     await createWindow();
   }).catch(async error => {
     // Startup has no editor to flush. Close only the service this app owns.
     quitting = true;
     await runtime?.close().catch(() => {});
-    await showError('纸间未能启动', error);
+    await showError('XiReader 未能启动', error);
     app.exit(1);
   });
 }

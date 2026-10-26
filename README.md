@@ -1,18 +1,31 @@
-# 纸间 Paperdesk
+# XiReader
+
+XiReader 是纸间 Paperdesk 的新显示名称。仓库现为 [Zeen-F/XiReader](https://github.com/Zeen-F/XiReader)，已有本地工作区无需改名。显示名称的更改保留兼容性：`Paperdesk.app` / `Paperdesk.exe`、安装包文件名、`paperdesk` API/MCP 标识和现有资料目录保持兼容。下方已发布 beta.6 安装包仍使用旧名称；修改源码不会更新已安装应用。
+
+## 本轮开发：统一 Codex 阅读会话
+
+- 阅读优先的可调左右侧栏；折叠不卸载已经打开的笔记和 Codex 编辑器。
+- 批注“问 Codex”打开本篇文献的当前会话，首次自动创建；后续批注更换下一条消息的引用，保留同一会话和草稿。只有用户选择“新对话”才另开会话，点击批注不会自动发送。
+- 直接通过本机已有 Codex CLI 流式问答、续聊、停止与恢复。批注讨论和普通阅读问答使用同一会话，不再提供独立讨论主面板。
+- 输入区显示连接状态，模型和推理强度来自本机 Codex 实际能力列表；连接检查不发送阅读资料。
+- 发送前核对 PDF 页码、可见范围、选区和批注快照；可取消附带。勾选本轮补读后，模型可按需读取本篇 PDF 的有界页文字，工具过程显示在消息中；没有 OCR 或整库访问。
+- 已完成的真实回答可经预览确认追加到原批注或笔记，保留原内容及“查看原对话”来源。旧手动讨论和草稿在批注的只读历史资料中展示，不伪装为模型输出。
+
+操作、权限、容量和恢复边界见 [Codex 阅读侧栏](docs/codex-sidebar.md)。旧存储与导出兼容规则见 [批注讨论说明](docs/annotation-discussions.md)。源码功能不代表旧公开包或已安装应用已经更新；真实模型与成品验收需分别核对。
 
 在本机阅读 PDF、划重点、记笔记，并把选中的证据带回写作。支持 Windows 桌面、Apple Silicon Mac 桌面和本机浏览器；可以使用独立文献库，也可以连接已有 Obsidian 知识库。
 
-我是软件开发小白，这个软件是通过和 AI 对话、反复试用和修改，**vibecoding（vibe coding）** 出来的。最初只是想给自己做一个方便读 PDF、划重点和记笔记的工具，于是有了「纸间」。目前仍是预览版，欢迎反馈问题、提建议或提交改进。
+我是软件开发小白，这个软件是通过和 AI 对话、反复试用和修改，**vibecoding（vibe coding）** 出来的。最初只是想给自己做一个方便读 PDF、划重点和记笔记的工具，于是有了最初的「纸间」，现更名为 XiReader。目前仍是预览版，欢迎反馈问题、提建议或提交改进。
 
 ## 下载、启动与升级
 
-本次版本为 **1.2.0-beta.6**，包含下文的阅读改进与可选山岚 V2 外观。[下载版本与校验值](https://github.com/Zeen-F/PDF_Vibecoding/releases/tag/v1.2.0-beta.6) 以 Release 页面实际提供的文件为准；源码更新不会自动升级旧安装包。
+本次版本为 **1.2.0-beta.6**，包含下文的阅读改进与可选山岚 V2 外观。[下载版本与校验值](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.6) 以 Release 页面实际提供的文件为准；源码更新不会自动升级旧安装包。
 
 | 入口 | 使用方法 |
 | --- | --- |
-| [Windows x64 ZIP](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
-| [macOS ARM64 DMG](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-mac-arm64.dmg) | 将 Paperdesk 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
-| [本机浏览器 ZIP](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
+| [Windows x64 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
+| [macOS ARM64 DMG](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-mac-arm64.dmg) | 将发布包中的 `Paperdesk.app` 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
+| [本机浏览器 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
 
 升级前保存并正常退出旧应用，备份完整文献库。将新版完整应用目录放到固定位置，再更新原桌面快捷方式的目标和工作目录；不要把临时测试包作为长期入口，也不要覆盖或搬动文献库。没有自动更新。旧插件若占用应用文件，先正常断开连接再升级。
 
@@ -28,7 +41,7 @@
 | 目录与书签 | PDF 目录、文字目录识别与页码校正，以及单独保存的个人页面书签。 |
 | 高亮与区域批注 | 选中文字后核对引文并写评论；扫描页、图表和公式可以框选区域。 |
 | 笔记与导出 | 单一 Markdown 编辑区、自动／手动保存，导出引文、评论和实际 PDF 页码。 |
-| 专注与返回 | 临时收起阅读侧栏并保留笔记编辑区和草稿；来源定位后可返回原页面及窗口内阅读位置。 |
+| 专注与返回 | 临时收起阅读侧栏，保留已挂载编辑器及草稿状态；编辑区不一定可见。来源定位后可返回原页面及窗口内阅读位置。 |
 | 弹层与窄窗 | 显示设置和翻译卡支持键盘焦点、Esc 关闭及窄窗口布局。 |
 
 显示设置、专注阅读、来源返回、翻译确认和受权限控制的 MCP 搜索属于本次升级，旧 beta.2 安装包不包含。详细操作见 [阅读布局与来源定位](docs/reader-display.md)。森林、暖砂、雾蓝、夜读四套皮肤不会改变 PDF 原始颜色。
@@ -58,7 +71,7 @@
 
 ## Codex 插件
 
-插件连接本机 Paperdesk 服务。阅读器中的普通浏览不自动共享全文；核对选区后再点“交给 Codex”，需要回答时再发送问题。AI 回答留在当前对话，只有明确要求记录时才追加笔记；未保存草稿或版本冲突会阻止覆盖。
+插件连接本机 XiReader 服务。阅读器中的普通浏览不自动共享全文；核对选区后再点“交给 Codex”，需要回答时再发送问题。AI 回答留在当前对话，只有明确要求记录时才追加笔记；未保存草稿或版本冲突会阻止覆盖。
 
 源码版需要 Node.js 24+、项目依赖和支持本地插件的 Codex。下面的命令对应源码浏览器服务：先运行 `npm.cmd run build`、`npm.cmd start`，核对打开的是预期文献库；保持服务运行，在另一个终端执行：
 
@@ -66,7 +79,7 @@
 npm.cmd run plugin:install
 ```
 
-命令会准备本机绑定、注册本地 marketplace 并安装插件。安装后在 Codex 新会话启用“纸间 Paperdesk”，说“打开纸间阅读器”，核对返回的资料库身份。已有绑定不一致时先确认目标库，不要覆盖配置。移动运行时目录或升级桌面包后需要重新核对绑定；自定义端口不能照抄默认的 4317。完整安装和绑定步骤见 [Codex 插件说明](docs/codex-plugin.md)。
+命令会准备本机绑定、注册本地 marketplace 并安装插件。安装后在 Codex 新会话启用“XiReader”，说“打开 XiReader 阅读器”，核对返回的资料库身份。已有绑定不一致时先确认目标库，不要覆盖配置。移动运行时目录或升级桌面包后需要重新核对绑定；自定义端口不能照抄默认的 4317。完整安装和绑定步骤见 [Codex 插件说明](docs/codex-plugin.md)。
 
 MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本机显式授权，授权包含内容范围、有效期及预算；不因一句“搜索文献”自动开放整个资料库。主动共享或检索返回给 Codex 的内容可能进入模型请求。
 
@@ -74,7 +87,7 @@ MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本�
 
 ## 从阅读证据到科研笔记
 
-与 [知识工作台](https://github.com/Zeen-F/knowledge-workbench) 连接同一个 Obsidian 库后，在纸间选中文字或区域，点击“发送到知识库”，核对实际 PDF 页并补充想法。保存的是这次选区、来源和可选原图，不会自动调用模型，也不修改原 PDF。
+与 [知识工作台](https://github.com/Zeen-F/knowledge-workbench) 连接同一个 Obsidian 库后，在 XiReader 选中文字或区域，点击“发送到知识库”，核对实际 PDF 页并补充想法。保存的是这次选区、来源和可选原图，不会自动调用模型，也不修改原 PDF。
 
 在工作台收集箱筛选材料、预览来源并选择参考笔记，再确认共享给 Codex 或自己的模型 API。生成结果进入待审草稿，结合固定的原文快照核对后再保存；原文、个人假设、AI 推断和待验证项应分别保留。来源链接可返回原 PDF 页和选区，文件变化或丢失时会提示核对，不会静默替换来源。
 
@@ -83,19 +96,19 @@ MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本�
 ## 数据、保存与恢复
 
 - 普通阅读、搜索、批注与笔记在本机处理，不需要翻译密钥或 Codex 插件。
-- Obsidian 模式下，已有 PDF 保持原位；外部导入副本保存在 `Paperdesk/PDFs/`，笔记、批注和页面书签在 `Paperdesk/Notes/`。正文可在两边编辑，受管理的标题、批注和书签在纸间修改。
+- Obsidian 模式下，已有 PDF 保持原位；外部导入副本保存在 `Paperdesk/PDFs/`，笔记、批注和页面书签在 `Paperdesk/Notes/`。正文可在两边编辑，受管理的标题、批注和书签在 XiReader 修改。
 - 桌面文献库与应用目录分开；源码浏览器版默认用 `data/`，开发模式用隔离的 `.local/dev-data/`。索引、翻译设置及恢复资料不作为正式笔记写进知识库。
 - 保存失败或版本冲突会保留输入并要求核对；正常桌面关闭等待待保存内容。评论草稿属于当前浏览器／桌面配置，不能替代文献库备份。
 - 跨盘保存保留可恢复的原文件，并检查副本和并发修改。云盘 PDF 短暂改变元数据时有界重读，持续变化或校验不一致仍拒绝继续。详见 [跨盘保存与成品验证](docs/vault-cross-volume-recovery.md)。
 
-备份前正常停止服务；独立库备份完整数据库及 PDF、翻译数据，不能在运行中只复制数据库主文件。Obsidian 模式应备份关联源 PDF、Paperdesk 管理文件及库外设置／恢复资料。含凭据的配置与数据库不要上传或提交 Git。强制退出、断电或清理浏览器存储不保证尚未提交的内容可恢复。
+备份前正常停止服务；独立库备份完整数据库及 PDF、翻译数据，不能在运行中只复制数据库主文件。Obsidian 模式应备份关联源 PDF、XiReader 管理文件及库外设置／恢复资料。含凭据的配置与数据库不要上传或提交 Git。强制退出、断电或清理浏览器存储不保证尚未提交的内容可恢复。
 
 ## 从源码运行与检查
 
 需要 Node.js 24+。首次获取源码后在项目目录运行；已有工作区直接使用原目录。以下为 Windows PowerShell 命令，macOS 使用 `npm` / `npx`：
 
 ```powershell
-git clone https://github.com/Zeen-F/PDF_Vibecoding.git
+git clone https://github.com/Zeen-F/XiReader.git PDF_Vibecoding
 cd PDF_Vibecoding
 npm.cmd ci
 npm.cmd run desktop
@@ -118,7 +131,7 @@ Windows 目录包入口为 `release/win-unpacked/Paperdesk.exe`。打包需要�
 - 双栏、脚注、公式及复杂文字层可能影响选文顺序，发送或保存引文前核对预览。100% 正常字号的 Windows 鼠标选文已验证；约 6px 微小字号的精确选文未验证。
 - 同一文献建议只在一个窗口编辑；没有多设备并发写入的一致性保证。Windows 桌面验收不能替代原生 macOS 验收，CI 也不等于真实模型或宿主面板验收。
 
-[反馈问题](https://github.com/Zeen-F/PDF_Vibecoding/issues) · [贡献约定](CONTRIBUTING.md) · [仓库安排](docs/repository-layout.md)
+[反馈问题](https://github.com/Zeen-F/XiReader/issues) · [贡献约定](CONTRIBUTING.md) · [仓库安排](docs/repository-layout.md)
 
 作者联系方式：**微信 a1152017529 · QQ 1152017529**。
 

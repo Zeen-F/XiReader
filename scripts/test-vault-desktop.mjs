@@ -124,7 +124,7 @@ async function annotateVaultPdf(document) {
   assert.equal(annotations.length, 1);
   assert.equal(annotations[0].quote, 'Reading with intention');
   assert.equal(annotations[0].comment, '直接选择 Obsidian 原 PDF 后的桌面批注。');
-  await page.locator('.panel-tabs').getByRole('button', { name: '笔记', exact: true }).click();
+  await page.getByRole('tab', { name: '笔记', exact: true }).click();
   return annotations[0];
 }
 async function bookmarkSecondPage(document) {

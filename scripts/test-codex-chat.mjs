@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import {once} from 'node:events';
+import {mkdtemp,mkdir,rm} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {chromium,expect} from '@playwright/test';
+import {createApp} from '../server/app.mjs';
+import {denseReadingPdf} from '../tests/fixtures/codex-reading.mjs';
+import {graphicsOnlyPdf} from '../tests/fixtures/scan-browser.mjs';
+import {mockCodex} from '../tests/fixtures/codex-rpc.mjs';
+const root=fileURLToPath(new URL('../',import.meta.url)),evidence=path.join(root,'.local/codex-sidebar');
+await mkdir(evidence,{recursive:true});const dataDir=await mkdtemp(path.join(evidence,'browser-fixture-'));
+const mock=mockCodex();let runtime,server,browser;const errors=[];
+try{
+ runtime=createApp({dataDir,codexOptions:{runtimeFactory:async()=>mock.rpc}});await runtime.ready;server=runtime.app.listen(0,'127.0.0.1');await once(server,'listening');
+ browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1400,height:950}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`http://127.0.0.1:${server.address().port}/?visual=shanlan`);
+ await page.getByLabel('选择 PDF 文件',{exact:true}).setInputFiles(path.join(root,'public/examples/reading-demo.pdf'));
+ await expect(page.locator('.pdf-paper[data-page="1"] .textLayer')).toBeVisible({timeout:30000});
+ await page.getByRole('tab',{name:'Codex',exact:true}).click();await page.getByRole('button',{name:'开始 Codex 对话',exact:true}).click();
+ const text=page.locator('.textLayer span').filter({hasText:/^Reading with intention$/});await expect(text).toBeVisible();const box=await text.boundingBox();await page.mouse.move(box.x+1,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width-1,box.y+box.height/2,{steps:5});await page.mouse.up();
+ await page.getByRole('button',{name:'问 Codex',exact:true}).click();
+ await page.getByLabel('发给 Codex 的问题').fill('Synthetic browser question');await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).toContainText('将发送的参考');
+ await expect(page.locator('.codex-snapshot')).toContainText('Reading with intention');await expect(page.locator('.codex-snapshot')).toContainText('选区 · 第 1 页');await expect(page.locator('.codex-snapshot')).toContainText('可见范围：第 1 页');
+ assert.equal(mock.calls.length,0,'preview must not spawn model');
+ await expect(page.locator('.codex-live-context')).toContainText('选区 · 第 1 页');await expect(page.getByRole('button',{name:'发送给 Codex',exact:true})).toBeDisabled();for(const state of ['cli-missing','auth-required']){const fake=route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({state,message:state==='cli-missing'?'未找到 Codex CLI':'Codex CLI 尚未登录',models:[]})});await page.route('**/api/codex/connection',fake);await page.getByRole('button',{name:/^(连接 Codex|重新检查连接)$/}).click();await expect(page.locator('.codex-connection')).toContainText(state==='cli-missing'?'CLI 未找到':'需要登录');await expect(page.getByRole('button',{name:'发送给 Codex',exact:true})).toBeDisabled();await page.unroute('**/api/codex/connection',fake);}
+ await page.getByRole('button',{name:/^(连接 Codex|重新检查连接)$/}).click();await expect(page.getByLabel('Codex 模型',{exact:true})).toHaveValue('synthetic-model');await page.getByLabel('Codex 推理强度',{exact:true}).selectOption('low');assert.equal(mock.calls.filter(c=>c.method==='turn/start').length,0,'connection check does not send a prompt');
+ await page.getByRole('button',{name:'移除选区引用',exact:true}).click();await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).not.toContainText('选区 · 第 1 页');await page.getByRole('button',{name:'恢复选区引用',exact:true}).click();await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).toContainText('选区 · 第 1 页');
+ await page.getByRole('button',{name:'发送给 Codex',exact:true}).click();await expect(page.getByRole('button',{name:'停止回答',exact:true})).toBeVisible();
+ const first=mock.calls.find(c=>c.method==='turn/start'),thread=first.params.threadId;
+ assert.equal(first.params.model,'synthetic-model');assert.equal(first.params.effort,'low');
+ const frozen=JSON.parse(Object.values(first.params.additionalContext).map(chunk=>chunk.value).join(''));assert.equal(frozen.page,1);assert.equal(frozen.selection.quote,'Reading with intention');assert.ok(frozen.visible.length>0);assert.equal(Object.values(first.params.additionalContext).every(chunk=>chunk.kind==='untrusted'),true);
+ mock.rpc.emit('notification',{method:'item/agentMessage/delta',params:{threadId:thread,turnId:'turn-1',itemId:'a',delta:'Streaming fragment'}});
+ await expect(page.locator('.codex-answer')).toContainText('Streaming fragment');await page.reload();await page.getByRole('tab',{name:'Codex',exact:true}).click();await expect(page.locator('.codex-answer')).toContainText('Streaming fragment');assert.equal(mock.calls.filter(c=>c.method==='turn/start').length,1,'reload must not resend');mock.finish(thread,'Synthetic completed answer');await expect(page.locator('.codex-answer')).toContainText('已完成');
+ await page.getByLabel('发给 Codex 的问题').fill('Preview must be refreshed after navigation');await page.getByRole('button',{name:'核对上下文',exact:true}).click();
+ await page.getByRole('button',{name:'下一页',exact:true}).click();await expect(page.locator('.pdf-paper[data-page="2"] .textLayer')).toBeVisible();await page.getByRole('button',{name:'发送给 Codex',exact:true}).click();await expect(page.locator('.codex-composer [role="alert"]')).toContainText('已变化');assert.equal(mock.calls.filter(c=>c.method==='turn/start').length,1);assert.equal(frozen.page,1);
+ await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot summary')).toContainText('第 2 页');
+ await page.getByLabel('发给 Codex 的问题').fill('Draft survives reload');await page.reload();await page.getByRole('tab',{name:'Codex',exact:true}).click();await expect(page.getByLabel('发给 Codex 的问题')).toHaveValue('Draft survives reload');await expect(page.locator('.codex-answer')).toContainText('Synthetic completed answer');
+ await page.getByRole('button',{name:'核对上下文',exact:true}).click();await page.getByRole('button',{name:'发送给 Codex',exact:true}).click();await expect(page.getByRole('button',{name:'停止回答',exact:true})).toBeVisible();
+ const active=mock.calls.filter(c=>c.method==='turn/start').at(-1);mock.rpc.emit('request',{id:701,method:'item/commandExecution/requestApproval',params:{threadId:active.params.threadId,turnId:'turn-2'}});
+ await expect(page.getByRole('button',{name:'拒绝此次权限',exact:true})).toBeVisible();assert.equal(mock.calls.some(c=>c.id===701),false);await page.getByRole('button',{name:'拒绝此次权限',exact:true}).click();await expect.poll(()=>mock.calls.find(c=>c.id===701)?.result?.decision).toBe('decline');
+ await page.getByRole('button',{name:'停止回答',exact:true}).click();await expect(page.locator('.codex-answer').last()).toContainText('已停止');
+ await page.getByRole('button',{name:'新对话',exact:true}).click();await expect(page.locator('.codex-chat-history li')).toHaveCount(0);await page.getByLabel('发给 Codex 的问题').fill('Second isolated draft');
+ const another=await context.newPage();await another.goto(page.url());await expect(another.locator('.pdf-paper .textLayer').first()).toBeVisible({timeout:30000});await another.getByRole('tab',{name:'Codex',exact:true}).click();await expect(another.getByRole('button',{name:'开始 Codex 对话',exact:true})).toBeVisible();
+ await page.screenshot({path:path.join(evidence,'codex-sidebar-browser.png'),fullPage:true});
+ // A different PDF cannot inherit this window's session or draft; a scan reports missing text.
+ await page.getByLabel('发给 Codex 的问题').fill('');
+ await page.getByLabel('选择 PDF 文件',{exact:true}).setInputFiles({name:'synthetic-scan.pdf',mimeType:'application/pdf',buffer:graphicsOnlyPdf()});await expect(page.locator('.pdf-paper[data-page="1"] canvas').first()).toBeVisible();
+ await page.getByRole('tab',{name:'Codex',exact:true}).click();await expect(page.getByRole('button',{name:'开始 Codex 对话',exact:true})).toBeVisible();await page.getByRole('button',{name:'开始 Codex 对话',exact:true}).click();await expect(page.getByLabel('发给 Codex 的问题')).toHaveValue('');await expect(page.locator('.codex-chat-history li')).toHaveCount(0);
+ await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).toContainText('没有可提取文字');await expect(page.locator('.codex-snapshot')).toContainText('没有执行 OCR');assert.equal(mock.calls.filter(c=>c.method==='turn/start').length,2);
+ await page.getByLabel('选择 PDF 文件',{exact:true}).setInputFiles({name:'synthetic-dense.pdf',mimeType:'application/pdf',buffer:denseReadingPdf()});await expect(page.locator('.textLayer span').first()).toBeVisible();await page.getByRole('tab',{name:'Codex',exact:true}).click();await page.getByRole('button',{name:'开始 Codex 对话',exact:true}).click();await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).toContainText('已截断');await expect(page.locator('.codex-snapshot')).toContainText('每页最多 4000 字符');assert.equal(mock.calls.filter(c=>c.method==='turn/start').length,2,'context inspection alone must never send');
+ await page.setViewportSize({width:480,height:900});await expect(page.getByLabel('发给 Codex 的问题')).toBeVisible();await page.getByLabel('发给 Codex 的问题').focus();await page.keyboard.type('Keyboard-only synthetic draft');await expect(page.getByLabel('发给 Codex 的问题')).toHaveValue('Keyboard-only synthetic draft');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Codex sidebar must fit a narrow window');
+ await page.screenshot({path:path.join(evidence,'codex-sidebar-narrow.png'),fullPage:true});
+ assert.deepEqual(errors,[]);console.log('PASS: visible sidebar, explicit snapshot, streaming, continuation, reload/draft, approval rejection, stop, new conversation, independent window/PDF, selection handoff, frozen viewport, stale preview refusal, missing-text and truncation disclosure and narrow keyboard input; mock model only.');
+}finally{await browser?.close();server?.closeAllConnections();if(server)await new Promise(r=>server.close(r));await runtime?.close();await rm(dataDir,{recursive:true,force:true});}

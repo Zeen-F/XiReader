@@ -78,21 +78,21 @@ export async function probeBrowserService(config, {
   } catch {
     return blocked('unverified', `端口 ${config.port} 已被占用，但服务响应超时或身份无法读取；未打开浏览器。请核对并正常停止旧服务后重试。`);
   }
-  if (!status || typeof status !== 'object') return blocked('unverified', `端口 ${config.port} 已被占用，无法核对纸间服务身份；未打开浏览器。请核对并正常停止旧服务后重试。`);
+  if (!status || typeof status !== 'object') return blocked('unverified', `端口 ${config.port} 已被占用，无法核对 XiReader 服务身份；未打开浏览器。请核对并正常停止旧服务后重试。`);
   if (status.service !== 'paperdesk') return blocked('other-service', `端口 ${config.port} 被其他服务占用；未打开浏览器。请选择空闲 PORT，或正常停止对应服务后重试。`);
-  if (typeof status.libraryId !== 'string' || !/^[a-f0-9]{64}$/.test(status.libraryId)) return blocked('unverified', `端口 ${config.port} 上的纸间未提供有效文献库身份；未打开浏览器。请正常停止旧服务，再从当前程序目录重新启动。`);
-  if (status.libraryId !== config.libraryId) return blocked('library', `端口 ${config.port} 上的纸间使用另一文献库；未打开浏览器，也未改动文献库。请正常停止该服务，或为当前文献库选择不同 PORT。`);
+  if (typeof status.libraryId !== 'string' || !/^[a-f0-9]{64}$/.test(status.libraryId)) return blocked('unverified', `端口 ${config.port} 上的 XiReader 未提供有效文献库身份；未打开浏览器。请正常停止旧服务，再从当前程序目录重新启动。`);
+  if (status.libraryId !== config.libraryId) return blocked('library', `端口 ${config.port} 上的 XiReader 使用另一文献库；未打开浏览器，也未改动文献库。请正常停止该服务，或为当前文献库选择不同 PORT。`);
   if (status.apiVersion !== SERVICE_API_VERSION || status.launcherProtocol !== LAUNCHER_PROTOCOL || status.productVersion !== config.productVersion) {
-    return blocked('version', `端口 ${config.port} 上的纸间版本或启动协议与当前程序不兼容（当前 ${config.productVersion}）；未打开浏览器。请正常停止旧服务，再从当前程序目录重新启动。`);
+    return blocked('version', `端口 ${config.port} 上的 XiReader 版本或启动协议与当前程序不兼容（当前 ${config.productVersion}）；未打开浏览器。请正常停止旧服务，再从当前程序目录重新启动。`);
   }
-  if (health?.ok !== true) return blocked('unhealthy', `端口 ${config.port} 上的纸间尚未就绪或健康检查失败；未打开浏览器。请检查启动窗口后重试。`);
+  if (health?.ok !== true) return blocked('unhealthy', `端口 ${config.port} 上的 XiReader 尚未就绪或健康检查失败；未打开浏览器。请检查启动窗口后重试。`);
   return { state: 'compatible' };
 }
 
 export function browserOpenCommand(baseUrl, platform = process.platform) {
   const url = new URL(baseUrl);
   if (url.protocol !== 'http:' || url.hostname !== HOST || url.username || url.password) {
-    throw new Error('启动器只能打开本机纸间地址。');
+    throw new Error('启动器只能打开本机 XiReader 地址。');
   }
   if (platform === 'win32') return ['rundll32.exe', ['url.dll,FileProtocolHandler', url.href]];
   if (platform === 'darwin') return ['/usr/bin/open', [url.href]];
@@ -129,7 +129,7 @@ export async function runBrowserLauncher({
   let inspection = await probe(config);
   if (signal?.aborted) return { state: 'cancelled', code: 130 };
   if (inspection.state === 'compatible') {
-    log(`纸间已经启动（当前文献库，${config.productVersion}）：${config.baseUrl}`);
+    log(`XiReader 已经启动（当前文献库，${config.productVersion}）：${config.baseUrl}`);
     open(config.baseUrl);
     return { state: 'reused', code: 0 };
   }
@@ -146,7 +146,7 @@ export async function runBrowserLauncher({
       delete childEnv.PAPERDESK_VAULT_SUBDIR;
     }
     child = spawnImpl(process.execPath, ['server/index.mjs'], { cwd: config.rootDir, stdio: ['inherit', 'inherit', 'inherit', 'ipc'], env: childEnv });
-  } catch (cause) { error(`无法启动纸间：${cause.message}`); return { state: 'failed', code: 1 }; }
+  } catch (cause) { error(`无法启动 XiReader：${cause.message}`); return { state: 'failed', code: 1 }; }
   let exited = false, exitCode, spawnError, ready = false;
   child.on('message', message => { if (message?.type === 'paperdesk-ready') ready = true; });
   child.once('exit', code => { exited = true; exitCode = code; });
@@ -172,7 +172,7 @@ export async function runBrowserLauncher({
       return { state: 'blocked', code: 1 };
     }
     if (exited && (inspection.state === 'free' || spawnError)) {
-      error(spawnError ? `无法启动纸间：${spawnError.message}` : `纸间启动失败（退出码 ${exitCode ?? '未知'}）；未打开浏览器。请检查上方启动错误。`);
+      error(spawnError ? `无法启动 XiReader：${spawnError.message}` : `XiReader 启动失败（退出码 ${exitCode ?? '未知'}）；未打开浏览器。请检查上方启动错误。`);
       return { state: 'failed', code: 1 };
     }
     if (Date.now() >= deadline) break;
@@ -183,10 +183,10 @@ export async function runBrowserLauncher({
   if (inspection.state === 'compatible') {
     // A matching service won the race while our child stalled before binding.
     open(config.baseUrl);
-    log(`纸间已经启动（当前文献库，${config.productVersion}）：${config.baseUrl}`);
+    log(`XiReader 已经启动（当前文献库，${config.productVersion}）：${config.baseUrl}`);
     return { state: 'reused', code: 0 };
   }
-  error(inspection.state === 'blocked' ? inspection.message : '纸间启动超时，未打开浏览器；本次启动的服务已停止。请检查启动输出后重试。');
+  error(inspection.state === 'blocked' ? inspection.message : 'XiReader 启动超时，未打开浏览器；本次启动的服务已停止。请检查启动输出后重试。');
   return { state: 'failed', code: 1 };
 }
 

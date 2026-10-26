@@ -105,7 +105,7 @@ export default function Library({ documents, currentId, loading, importing, quer
   const candidateRows = [...candidates,...linkedMatches].map(file => <div className="document-row vault-document-row" key={file.path} data-vault-pdf={file.documentId ? undefined : file.path}>
     <button className="document-item vault-document-item" aria-label={`打开 Obsidian PDF：${file.path}`} disabled={vaultBusy} onClick={() => void (file.documentId ? onOpen(file.documentId) : onVaultPdfOpen(file.path))}><FileText size={16} className="vault-document-icon"/><span className="document-details"><b>{file.title || file.name}</b>{file.title && file.title !== file.name && <small className="vault-document-path">{file.name}</small>}<small className="vault-document-path">{directory(file)}</small><small>{fmtSize(file.byteSize)} · {query.trim() ? '文件名 / 路径匹配' : '尚未打开'}</small></span></button>
   </div>);
-  const brand = <a href="#" className="brand" onClick={event => { event.preventDefault(); onQuery(''); setFilter('all'); }}><span className="brand-mark"><BookOpen size={22}/></span><span>纸间<span className="brand-english">PAPERDESK</span></span></a>;
+  const brand = <a href="#" className="brand" onClick={event => { event.preventDefault(); onQuery(''); setFilter('all'); }}><span className="brand-mark"><BookOpen size={22}/></span><span>XiReader<span className="brand-english">READ · THINK · KEEP</span></span></a>;
   return <>
     {shelfPreview ? <div className="shelf-brand-row">{brand}<ShelfJump noun="文献" items={documents.map(doc => ({ id: doc.id, title: doc.title, detail: `${doc.pageCount} 页 · ${fmtSize(doc.byteSize)}` }))} onOpen={onOpen}/></div> : brand}
     <div className="sidebar-caption">给阅读留一张安静的书桌。</div>

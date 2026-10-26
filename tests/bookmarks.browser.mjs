@@ -95,7 +95,7 @@ async function runBookmarkMode({context,root,onPreview,mode}) {
     await openBooks();await expect(editor(2)).toHaveValue('保存失败仍保留的名称');
     await page.getByRole('button',{name:'关闭书签',exact:true}).click();
     if(await page.getByRole('button',{name:'展开笔记面板',exact:true}).count())await page.getByRole('button',{name:'展开笔记面板',exact:true}).click();
-    await page.locator('.panel-tabs button').last().click();await page.locator('.annotation-card .page-link').click();await expect(currentPage()).toHaveValue('2');await expect(page.locator('.toast')).toContainText('未保存或未确认的书签更改');
+    await page.getByRole('tab', { name: /^批注/ }).click();await page.locator('.annotation-card .page-link').click();await expect(currentPage()).toHaveValue('2');await expect(page.locator('.toast')).toContainText('未保存或未确认的书签更改');
     await documentButton(second.id).click();await expect(page.locator('.toast')).toContainText('未保存或未确认的书签更改');await expect(documentButton(first.id)).toHaveClass(/active/);
     const uploadsBefore=uploads.length;await page.getByLabel('选择 PDF 文件').setInputFiles({name:'另文献.pdf',mimeType:'application/pdf',buffer:secondBytes});await expect(page.locator('.toast')).toContainText('导入未开始');assert.equal(uploads.length,uploadsBefore);
     const flushDraft=await page.evaluate(async()=>{try{await window.__bookmarkFlush();return '';}catch(error){return error.message;}});assert.match(flushDraft,/未保存或未确认的书签/);

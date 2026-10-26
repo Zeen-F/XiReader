@@ -24,6 +24,7 @@ export async function vaultWorkflow({context,root,onPreview}) {
   const runtime=createApp({vaultDir,dataDir});await runtime.ready;
   const server=runtime.app.listen(0,'127.0.0.1');await once(server,'listening');
   const base=`http://127.0.0.1:${server.address().port}`;
+  const {libraryId}=await(await fetch(`${base}/api/plugin/status`)).json();
   const page=await context.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   const uploads=[],associations=[];page.on('request',request=>{if(request.method()==='POST'&&request.url()===`${base}/api/documents`)uploads.push(request.url());if(request.method()==='POST'&&request.url()===`${base}/api/vault/pdfs/open`)associations.push(request.url());});
@@ -65,8 +66,8 @@ export async function vaultWorkflow({context,root,onPreview}) {
     const dialog=page.getByRole('dialog',{name:'资料位置',exact:true});
     await expect(dialog).toContainText('Obsidian 仓库');await expect(dialog).toContainText('精读知识库');await expect(dialog).toContainText('0 份已关联文献');
     const rules=dialog.getByRole('region',{name:'使用规则',exact:true});
-    await expect(rules).toContainText('笔记正文可在 Paperdesk 和 Obsidian 两边编辑');
-    await expect(rules).toContainText('批注、标题和分类在 Paperdesk 修改');
+    await expect(rules).toContainText('笔记正文可在 XiReader 和 Obsidian 两边编辑');
+    await expect(rules).toContainText('批注、标题和分类在 XiReader 修改');
     await expect(rules).toContainText('PDF 留在原目录');
     await expect(rules).toContainText('移动或改名后，暂需恢复原路径');
     await expect(rules).toContainText('同一篇文献错开编辑');
@@ -115,7 +116,7 @@ export async function vaultWorkflow({context,root,onPreview}) {
     const doc=(await selectedResponse.json()).document;
     await expect(picker).toHaveCount(0);
     const editor=page.getByRole('textbox',{name:'笔记',exact:true});await expect(editor).toBeVisible();
-    await expect(page.locator('.vault-note-rule')).toHaveText('正文可在两边编辑，批注由 Paperdesk 管理。');
+    await expect(page.locator('.vault-note-rule')).toHaveText('正文可在两边编辑，批注由 XiReader 管理。');
     await expect(page.getByLabel('PDF 第 1 页',{exact:true})).toBeVisible();
     await editor.fill('Paperdesk 初始理解');await page.getByRole('button',{name:'保存',exact:true}).click();
     await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到 Obsidian 仓库');
@@ -170,7 +171,7 @@ export async function vaultWorkflow({context,root,onPreview}) {
     await expect(page.locator('.toast')).toContainText('仍有未保存的批注评论');assert.equal(associations.length,beforeDraftAssociations);assert.equal(uploads.length,beforeDraftUploads);
     await expect(annotationEditor).toHaveValue('选择前仍未保存的评论草稿');assert.equal((await documentList()).length,1);
     await page.locator('.annotation-card').getByRole('button',{name:'放弃草稿',exact:true}).click();
-    await page.locator('.panel-tabs button').first().click();
+    await page.getByRole('tab',{name:'笔记',exact:true}).click();
     await page.route(`${base}/api/documents/${doc.id}`,async route=>{
       if(route.request().method()==='PATCH'&&typeof route.request().postDataJSON()?.notesZh==='string')await route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:'隔离验证：选择前笔记保存失败'})});
       else await route.continue();
@@ -277,8 +278,9 @@ export async function vaultWorkflow({context,root,onPreview}) {
       await expect(page.locator('.notes-conflict')).toHaveCount(0);
       await expect(page.getByRole('button',{name:'保存',exact:true})).toBeEnabled();
       await expect(editor).toHaveValue(latestNotes);
-      const retained=await page.evaluate(id=>JSON.parse(localStorage.getItem(sessionStorage.getItem(`paperdesk-draft-slot-${id}`))||'null'),doc.id);
-      assert.equal(retained.notesZh,latestNotes);
+      const retained=await page.evaluate(({id,libraryId})=>JSON.parse(localStorage.getItem(sessionStorage.getItem(`paperdesk-note-draft-slot-v2:${encodeURIComponent(libraryId)}:${encodeURIComponent(id)}:`))||'null'),{id:doc.id,libraryId});
+      assert.equal(retained.text,latestNotes);
+      assert.equal(retained.libraryId,libraryId);assert.equal(retained.documentId,doc.id);
       assert.equal(await readFile(note,'utf8'),damaged,'Rejected saves must not rewrite a damaged formal file');
       assert.deepEqual((await readdir(conflicts)).sort(),archivesBefore,'A structural error must not be presented or archived as a note version conflict');
       await writeFile(note,original);

@@ -82,6 +82,7 @@ export async function shanlanWorkflow({ browser, base }) {
     await expect(page.locator('html')).toHaveAttribute('data-shelf-density', 'compact');
     await expect(page.locator('html')).toHaveAttribute('data-shelf-scene', 'dawn');
     await page.setViewportSize({ width: 1000, height: 640 });
+    await page.getByRole('button', { name: '展开文献栏', exact: true }).click();
     await expect(trigger).toBeInViewport();
     await expect(page.getByRole('button', { name: '月下场景', exact: true })).toBeInViewport();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

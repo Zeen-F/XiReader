@@ -26,14 +26,14 @@ try {
   const url = new URL(values['base-url']);
   if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)
       || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('插件只能连接本机纸间服务，请提供 http://127.0.0.1:端口。');
+    throw new Error('插件只能连接本机 XiReader 服务，请提供 http://127.0.0.1:端口。');
   }
   await access(resolve(root, 'server/mcp.mjs'));
   const response = await fetch(`${url.origin}/api/plugin/status`, { signal: AbortSignal.timeout(5000), redirect: 'error' });
   const status = await response.json();
   if (!response.ok || status.service !== 'paperdesk' || status.apiVersion !== 1
       || !/^[a-f0-9]{64}$/.test(status.libraryId)) {
-    throw new Error('这个端口没有兼容的纸间插件接口，请先构建并启动当前版本。');
+    throw new Error('这个端口没有兼容的 XiReader 插件接口，请先构建并启动当前版本。');
   }
   const profilePath = resolve(values.config || process.env.PAPERDESK_PLUGIN_CONFIG
     || resolve(homedir(), '.config/paperdesk/plugin.json'));
@@ -75,7 +75,7 @@ try {
       await writeFile(temporary, `${JSON.stringify(profile, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
       await rename(temporary, profilePath);
     } finally { await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
-    console.log('纸间插件已绑定当前本机文献库。');
+    console.log('XiReader 插件已绑定当前本机文献库。');
     if (grantRequested) console.log(`已授权模型搜索指定文献的 ${profile.searchGrant.sources.join(', ')} 内容（包括其中可能的私人资料），到期时间 ${profile.searchGrant.expiresAt}。可用 --revoke-search 立即撤回后续搜索。`);
     if (values['revoke-search']) console.log('已撤回后续内容搜索；已经返回到对话的内容无法收回。');
     if (values.install) {

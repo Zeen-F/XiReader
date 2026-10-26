@@ -57,6 +57,7 @@ export async function pluginWorkflow({ context, base }) {
   };
   const getDoc = async id => (await (await fetch(`${base}/api/documents/${id}`)).json()).document;
   const getContext = async id => (await (await fetch(`${base}/api/reader-context?sessionId=${id}`)).json());
+  const { libraryId } = await (await fetch(`${base}/api/plugin/status`)).json();
   try {
     const book = await upload('original-codex-text.pdf', bookmarkedPdf());
     const scan = await upload('original-codex-region.pdf', graphicsOnlyPdf());
@@ -130,12 +131,15 @@ export async function pluginWorkflow({ context, base }) {
     // Hold the response after the first save reached the server. Returning to A
     // while B is in flight must enqueue A against B's acknowledged revision.
     const endpoint = `${base}/api/documents/${book.id}`;
+    const documentRoute = url => url.origin === base && url.pathname === `/api/documents/${book.id}`;
+    const noteScope = `${encodeURIComponent(libraryId)}:${encodeURIComponent(book.id)}:`;
+    const draftPrefix = `paperdesk-note-draft-v2:${noteScope}`, archivePrefix = `paperdesk-note-preserved-v2:${noteScope}`;
     const original = await editor.inputValue();
     let release, entered;
     const gate = new Promise(resolve => { release = resolve; });
     const intercepted = new Promise(resolve => { entered = resolve; });
     let held = false;
-    await page.route(endpoint, async route => {
+    await page.route(documentRoute, async route => {
       const body = route.request().method() === 'PATCH' ? route.request().postDataJSON() : null;
       if (body?.notesZh === 'Temporary B' && !held) { held = true; const response = await route.fetch(); entered(); await gate; await route.fulfill({ response }); }
       else await route.continue();
@@ -144,7 +148,7 @@ export async function pluginWorkflow({ context, base }) {
     await editor.fill(original); await page.getByRole('button', { name: '保存', exact: true }).click(); release();
     await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到本机');
     assert.equal((await getDoc(book.id)).notesZh, original);
-    await page.unroute(endpoint);
+    await page.unroute(documentRoute);
 
     // Hold a pending local edit, then simulate a second editor winning CAS.
     // Both a rejected write and a heartbeat must preserve this local draft.
@@ -152,7 +156,7 @@ export async function pluginWorkflow({ context, base }) {
     const conflictGate = new Promise(resolve => { releaseConflict = resolve; });
     const conflictingRequest = new Promise(resolve => { enteredConflict = resolve; });
     const draft = '这份本机草稿必须保留，不能被外部追加覆盖。';
-    await page.route(endpoint, async route => {
+    await page.route(documentRoute, async route => {
       const body = route.request().method() === 'PATCH' ? route.request().postDataJSON() : null;
       if (body?.notesZh === draft) { enteredConflict(); await conflictGate; }
       await route.continue();
@@ -168,7 +172,7 @@ export async function pluginWorkflow({ context, base }) {
     await expect(page.locator('.notes-conflict')).toBeVisible();
     await expect(editor).toHaveValue(draft);
     assert.equal((await getDoc(book.id)).notesZh, external);
-    await page.unroute(endpoint);
+    await page.unroute(documentRoute);
     await page.getByRole('button', { name: '保留草稿并载入已保存笔记', exact: true }).click();
     await expect(editor).toHaveValue(external);
     await page.locator('.preserved-drafts summary').click();
@@ -186,7 +190,7 @@ export async function pluginWorkflow({ context, base }) {
       const body = route.request().method() === 'PATCH' ? route.request().postDataJSON() : null;
       if (body && Object.hasOwn(body, 'notesZh')) await route.abort('failed'); else await route.continue();
     };
-    await page.route(endpoint, rejectNotes); await sibling.page.route(endpoint, rejectNotes);
+    await page.route(documentRoute, rejectNotes); await sibling.page.route(documentRoute, rejectNotes);
     page.on('dialog', dialog => dialog.accept());
     await editor.fill('窗口甲独立草稿'); await page.getByRole('button', { name: '保存', exact: true }).click();
     await expect(page.locator('.save-row [role="status"]')).toHaveText('保存失败，草稿已保留');
@@ -194,18 +198,18 @@ export async function pluginWorkflow({ context, base }) {
     await expect(sibling.page.locator('.save-row [role="status"]')).toHaveText('保存失败，草稿已保留');
     await page.reload(); await expect(editor).toHaveValue('窗口甲独立草稿');
     await expect(siblingEditor).toHaveValue('窗口乙独立草稿');
-    await sibling.page.unroute(endpoint); await sibling.page.getByRole('button', { name: '保存', exact: true }).click();
+    await sibling.page.unroute(documentRoute); await sibling.page.getByRole('button', { name: '保存', exact: true }).click();
     await expect(sibling.page.locator('.save-row [role="status"]')).toHaveText('已保存到本机');
     await page.reload(); await expect(editor).toHaveValue('窗口甲独立草稿');
     await expect(page.locator('.notes-conflict')).toBeVisible();
-    await page.unroute(endpoint);
+    await page.unroute(documentRoute);
     await page.getByRole('button', { name: '保留草稿并载入已保存笔记', exact: true }).click();
     await expect(editor).toHaveValue('窗口乙独立草稿');
     await sibling.page.close();
 
     // A late recovery GET must not replace a newer heartbeat document and then
     // leave the editor permanently stale (its prop revision already changed).
-    await page.route(endpoint, rejectNotes);
+    await page.route(documentRoute, rejectNotes);
     // One stalled request must not occupy the serialized heartbeat sender
     // forever. Keep it pending until a later heartbeat observes the revision.
     const heartbeatEndpoint = `${base}/api/reader-sessions/${reader.sessionId()}`;
@@ -238,11 +242,11 @@ export async function pluginWorkflow({ context, base }) {
       releaseHeartbeat();
       await page.unroute(heartbeatEndpoint, holdHeartbeat);
     }
-    await page.unroute(endpoint);
+    await page.unroute(documentRoute);
     let releaseRecovery, enteredRecovery, heldRecovery = false;
     const recoveryGate = new Promise(resolve => { releaseRecovery = resolve; });
     const recoveryEntered = new Promise(resolve => { enteredRecovery = resolve; });
-    await page.route(endpoint, async route => {
+    await page.route(documentRoute, async route => {
       if (route.request().method() === 'GET' && !heldRecovery) { heldRecovery = true; const response = await route.fetch(); enteredRecovery(); await recoveryGate; await route.fulfill({ response }); }
       else await route.continue();
     });
@@ -255,12 +259,12 @@ export async function pluginWorkflow({ context, base }) {
     releaseRecovery();
     await expect(editor).toHaveValue('恢复期间收到的最新服务版本');
     await expect(page.locator('.save-row [role="status"]')).toHaveText('已保存到本机');
-    await page.unroute(endpoint);
+    await page.unroute(documentRoute);
     console.log('PASS: independent tab draft slots survive failed saves/reload, and late recovery cannot roll back a newer heartbeat');
 
     const orphan = await open(`${base}/?document=${book.id}&page=2`);
     const orphanText = '关闭窗口后仍应能找到的独立草稿。';
-    await orphan.page.route(endpoint, rejectNotes);
+    await orphan.page.route(documentRoute, rejectNotes);
     await orphan.page.getByRole('textbox', { name: '笔记', exact: true }).fill(orphanText);
     await orphan.page.getByRole('button', { name: '保存', exact: true }).click();
     await expect(orphan.page.locator('.save-row [role="status"]')).toHaveText('保存失败，草稿已保留');
@@ -269,25 +273,26 @@ export async function pluginWorkflow({ context, base }) {
     await page.locator('.historical-drafts summary').click();
     await expect.poll(() => page.locator('.historical-drafts textarea').evaluateAll(fields => fields.map(field => field.value))).toContain(orphanText);
     await expect(orphan.page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue(orphanText);
-    const beforeOrphan = await orphan.page.evaluate(id => Object.fromEntries(Object.keys(localStorage).filter(key => key.startsWith(`paperdesk-draft-${id}-`)).map(key => [key, localStorage.getItem(key)])), book.id);
+    const beforeOrphan = await orphan.page.evaluate(prefix => Object.fromEntries(Object.keys(localStorage).filter(key => key.startsWith(prefix)).map(key => [key, localStorage.getItem(key)])), draftPrefix);
     await orphan.page.evaluate(id => localStorage.setItem(`paperdesk-preserved-drafts-${id}`, JSON.stringify([{ text: '旧数组格式保留的草稿', savedAt: '2000-01-01T00:00:00.000Z' }])), book.id);
     await orphan.page.evaluate(() => sessionStorage.clear()); await orphan.page.close();
     const fresh = await open(`${base}/?document=${book.id}&page=2`);
     const noteWrites = [];
     fresh.page.on('request', request => { if (request.url() === endpoint && request.method() === 'PATCH' && Object.hasOwn(request.postDataJSON(), 'notesZh')) noteWrites.push(request.postDataJSON()); });
     await expect(fresh.page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue('恢复期间收到的最新服务版本');
-    await expect.poll(() => fresh.page.locator('.preserved-drafts textarea').evaluateAll(fields => fields.map(field => field.value))).toContain('旧数组格式保留的草稿');
+    await expect.poll(() => fresh.page.locator('.legacy-drafts textarea').evaluateAll(fields => fields.map(field => field.value))).toContain('旧数组格式保留的草稿');
+    assert.equal(await fresh.page.locator('.legacy-drafts textarea').evaluateAll(fields => fields.every(field => field.readOnly)), true);
     await fresh.page.locator('.historical-drafts summary').click();
     await expect.poll(() => fresh.page.locator('.historical-drafts textarea').evaluateAll(fields => fields.map(field => field.value))).toContain(orphanText);
     assert.equal(await fresh.page.locator('.historical-drafts textarea').evaluateAll(fields => fields.every(field => field.readOnly)), true);
     const initialFreshUpdate = (await getContext(fresh.sessionId())).updatedAt;
     await expect.poll(async () => (await getContext(fresh.sessionId())).updatedAt).not.toBe(initialFreshUpdate);
     assert.deepEqual(noteWrites, [], 'Viewing an orphaned or active draft must not write it back');
-    assert.deepEqual(await fresh.page.evaluate(id => Object.fromEntries(Object.keys(localStorage).filter(key => key.startsWith(`paperdesk-draft-${id}-`)).map(key => [key, localStorage.getItem(key)])), book.id), beforeOrphan);
+    assert.deepEqual(await fresh.page.evaluate(prefix => Object.fromEntries(Object.keys(localStorage).filter(key => key.startsWith(prefix)).map(key => [key, localStorage.getItem(key)])), draftPrefix), beforeOrphan);
 
     // Preserve concurrently from two conflicting editors. Both operations use
     // independent UUID keys and both views learn about the other archive.
-    await page.route(endpoint, rejectNotes); await fresh.page.route(endpoint, rejectNotes);
+    await page.route(documentRoute, rejectNotes); await fresh.page.route(documentRoute, rejectNotes);
     const archiveA = '同时归档的甲草稿', archiveB = '同时归档的乙草稿';
     await editor.fill(archiveA); await page.getByRole('button', { name: '保存', exact: true }).click();
     await fresh.page.getByRole('textbox', { name: '笔记', exact: true }).fill(archiveB);
@@ -306,10 +311,12 @@ export async function pluginWorkflow({ context, base }) {
     for (const readerPage of [page, fresh.page]) {
       await expect.poll(() => readerPage.locator('.preserved-drafts textarea').evaluateAll(fields => fields.map(field => field.value))).toEqual(expect.arrayContaining([archiveA, archiveB]));
     }
-    const archives = await page.evaluate(id => Object.keys(localStorage).filter(key => key.startsWith(`paperdesk-preserved-draft-${id}-`)).map(key => ({ key, ...JSON.parse(localStorage.getItem(key)) })), book.id);
+    const archives = await page.evaluate(prefix => Object.keys(localStorage).filter(key => key.startsWith(prefix)).map(key => ({ key, ...JSON.parse(localStorage.getItem(key)) })), archivePrefix);
     assert.equal(archives.filter(entry => [archiveA, archiveB].includes(entry.text)).length, 2);
+    assert.ok(archives.every(entry => entry.libraryId === libraryId && entry.documentId === book.id && typeof entry.owner === 'string'));
+    assert.equal(await page.evaluate(id => localStorage.getItem(`paperdesk-preserved-drafts-${id}`), book.id), JSON.stringify([{ text: '旧数组格式保留的草稿', savedAt: '2000-01-01T00:00:00.000Z' }]));
     assert.notEqual(archives.find(entry => entry.text === archiveA).key, archives.find(entry => entry.text === archiveB).key);
-    await page.unroute(endpoint); await fresh.page.close();
+    await page.unroute(documentRoute); await fresh.page.close();
     console.log('PASS: read-only orphan/live draft recovery without sessionStorage and concurrent independent archive entries');
 
     await page.goto(`${base}/?document=${book.id}&page=1e2`);

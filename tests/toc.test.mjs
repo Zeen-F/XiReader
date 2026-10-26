@@ -253,7 +253,11 @@ test('TOC endpoint works for previously imported documents across restart withou
   assert.equal(database.prepare('PRAGMA user_version').get().user_version, CURRENT_SCHEMA);
   assert.ok(!database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().some(row => /toc|outline/i.test(row.name)));
   database.close();
-  assert.deepEqual((await readdir(dataDir)).filter(name => !name.startsWith('paperdesk.sqlite')), ['pdfs']);
+  const databaseFiles = new Set([
+    'paperdesk.sqlite', 'paperdesk.sqlite-wal', 'paperdesk.sqlite-shm',
+    'discussions.sqlite', 'discussions.sqlite-wal', 'discussions.sqlite-shm',
+  ]);
+  assert.deepEqual((await readdir(dataDir)).filter(name => !databaseFiles.has(name)), ['pdfs']);
   assert.equal((await fetch(`${base}/api/documents/not-a-document/toc`)).status, 404);
   assert.equal((await fetch(`${base}/api/documents/${doc.id}/toc`, { headers: { Origin: 'https://example.com' } })).status, 403);
 

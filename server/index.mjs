@@ -13,16 +13,16 @@ let stopping = false;
 const server = createServer((request, response) => {
   if (application) return application.app(request, response);
   response.writeHead(503, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ error: '纸间正在启动，请稍后重试。' }));
+  response.end(JSON.stringify({ error: 'XiReader 正在启动，请稍后重试。' }));
 });
 server.listen(port, '127.0.0.1', async () => {
   try {
     application = createApp();
     await application.ready;
-    console.log(`Paperdesk 已启动：http://127.0.0.1:${port}`);
+    console.log(`XiReader 已启动：http://127.0.0.1:${port}`);
     if (process.connected) process.send({ type: 'paperdesk-ready' }, () => {});
   } catch (error) {
-    console.error(`纸间启动失败：${error.message}`);
+    console.error(`XiReader 启动失败：${error.message}`);
     process.exitCode = 1;
     shutdown();
   }

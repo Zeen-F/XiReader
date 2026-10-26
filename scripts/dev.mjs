@@ -78,7 +78,7 @@ if (process.connected) process.once('disconnect', () => { void shutdown(1); });
 process.channel?.unref();
 
 try {
-  if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Paperdesk requires Node.js 24 or newer. Use the Node 24 LTS version in .nvmrc.');
+  if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('XiReader requires Node.js 24 or newer. Use the Node 24 LTS version in .nvmrc.');
   if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535 || apiPort === uiPort) {
     throw new Error('DEV_API_PORT must be an integer from 1 to 65535, different from the UI port 5173.');
   }

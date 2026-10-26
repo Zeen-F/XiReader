@@ -4,11 +4,14 @@ import { mkdtemp, mkdir, writeFile, rm, access, realpath } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ensureReaderRuntime, readerRuntimeEnvironment } from '../server/plugin-runtime.mjs';
+import { ensureReaderRuntime as runReaderRuntime, readerRuntimeEnvironment } from '../server/plugin-runtime.mjs';
 
 const libraryId = 'a'.repeat(64);
 const profile = { baseUrl: 'http://127.0.0.1:4317', libraryId, workspaceRoot: '/unconfigured-workspace', autoStart: true };
 function offline() { throw new TypeError('fetch failed', { cause: Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }) }); }
+// Injectable transport keeps every fixture off real local services.
+const transport = { fetch: offline };
+const ensureReaderRuntime = profile => runReaderRuntime(profile, { fetchImpl: transport.fetch });
 function reply(value, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
 test('auto-start cannot inherit a different vault or data path from the Windows host', () => {
@@ -18,10 +21,10 @@ test('auto-start cannot inherit a different vault or data path from the Windows 
 });
 
 test('runtime reuses only an identity-matched live service without accessing or launching a workspace', async t => {
-  t.mock.method(globalThis, 'fetch', async () => reply({ service: 'paperdesk', apiVersion: 1, libraryId }));
+  t.mock.method(transport, 'fetch', async () => reply({ service: 'paperdesk', apiVersion: 1, libraryId }));
   assert.deepEqual(await ensureReaderRuntime(profile), { started: false });
   t.mock.restoreAll();
-  t.mock.method(globalThis, 'fetch', async () => reply({ service: 'paperdesk', apiVersion: 1, libraryId: 'b'.repeat(64) }));
+  t.mock.method(transport, 'fetch', async () => reply({ service: 'paperdesk', apiVersion: 1, libraryId: 'b'.repeat(64) }));
   await assert.rejects(ensureReaderRuntime(profile), /身份.*不一致/);
 });
 
@@ -33,13 +36,13 @@ test('runtime does not launch over a different service, malformed response, redi
     () => { throw new Error('timeout'); },
   ]) {
     t.mock.restoreAll();
-    t.mock.method(globalThis, 'fetch', async () => make());
+    t.mock.method(transport, 'fetch', async () => make());
     await assert.rejects(ensureReaderRuntime(profile), /不是兼容|无法核对/);
   }
 });
 
 test('runtime refuses implicit startup, remote targets and custom ports while offline', async t => {
-  t.mock.method(globalThis, 'fetch', offline);
+  t.mock.method(transport, 'fetch', offline);
   await assert.rejects(ensureReaderRuntime({ ...profile, autoStart: false }), /尚未启动/);
   await assert.rejects(ensureReaderRuntime({ ...profile, autoStart: undefined }), /尚未启动/);
   await assert.rejects(ensureReaderRuntime({ ...profile, baseUrl: 'https://example.org' }), /loopback/);
@@ -47,7 +50,7 @@ test('runtime refuses implicit startup, remote targets and custom ports while of
 });
 
 test('runtime requires the bound existing default library and built reader before creating logs or launching', async t => {
-  t.mock.method(globalThis, 'fetch', offline);
+  t.mock.method(transport, 'fetch', offline);
   const root = await realpath(await mkdtemp(join(tmpdir(), 'paperdesk-runtime-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const bound = { ...profile, workspaceRoot: root, libraryId: createHash('sha256').update(join(root, 'data')).digest('hex') };
