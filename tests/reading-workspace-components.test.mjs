@@ -26,7 +26,7 @@ test('workspace component markup exposes anchored source, bounded scope and hone
     assert.match(other, /id="thread-answer-thread-b"/); assert.doesNotMatch(other, /id="thread-answer-thread-a"/);
     const scope = renderToStaticMarkup(React.createElement(Scope, { scope: 'custom', pages: '1,2', onChange() {}, idPrefix: 'thread-a', context: { pageCount: 2, characterCount: 18, pages: [{ page: 1 }, { page: 2 }], emptyPages: [2] } }));
     assert.match(scope, /id="thread-a-scope"/); assert.match(scope, /未做 OCR/); assert.match(scope, /不会撤回 Codex/);
-    const card = renderToStaticMarkup(React.createElement(AnnotationCard, { annotation: { ...thread, id: 'annotation-a', color: 'yellow', comment: '', createdAt: '2026-01-01' }, drafts: { edit: () => null }, onJump() {}, onDiscuss() {}, messageCount: 3 }));
-    assert.match(card, /讨论这条批注/); assert.match(card, /3 条记录/); assert.match(card, /aria-label="回到第 2 页批注原文"/);
+    const card = renderToStaticMarkup(React.createElement(AnnotationCard, { annotation: { ...thread, id: 'annotation-a', color: 'yellow', comment: '', createdAt: '2026-01-01' }, drafts: { edit: () => null }, onJump() {}, onDiscuss() {}, libraryId: 'library-a' }));
+    assert.match(card, /问 Codex · 讨论这条批注/); assert.equal((card.match(/class="annotation-discuss"/g)||[]).length, 1); assert.match(card, /历史资料（旧讨论与草稿，只读）/); assert.doesNotMatch(card, /3 条记录/); assert.match(card, /aria-label="回到第 2 页批注原文"/);
   } finally { await vite.close(); }
 });

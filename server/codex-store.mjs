@@ -12,6 +12,7 @@ export function createCodexStore({dataDir,vaultStore,HttpError}){
    for(const t of s.turns){
     if(!uuid.test(t.requestId)||!hash.test(t.fingerprint)||typeof t.question!=='string'||t.question.length>12000||!['preparing','sending','running','stopping','approval','uncertain','failed','completed','interrupted'].includes(t.status)||!Array.isArray(t.items)||t.items.length>100||!Array.isArray(t.approvals))fail();
     if(t.snapshot?.libraryId!==s.binding.libraryId||t.snapshot?.documentId!==id||t.snapshot?.pdfSha256!==s.binding.pdfSha256)fail();
+    if(t.toolReads!==undefined&&(!Array.isArray(t.toolReads)||t.toolReads.length>12||t.toolReads.some(r=>typeof r.id!=='string'||!['running','completed','denied','failed'].includes(r.status)||!Array.isArray(r.pages))))fail();
     if(t.items.some(i=>typeof i.id!=='string'||typeof i.text!=='string')||t.items.reduce((n,i)=>n+i.text.length,0)>100000)fail();
    }
   }

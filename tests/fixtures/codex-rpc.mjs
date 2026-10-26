@@ -2,6 +2,8 @@ import {EventEmitter} from 'node:events';
 export function mockCodex(){
  const rpc=new EventEmitter(),calls=[];let threads=0,turns=0;const history=new Map();rpc.start=async()=>{};rpc.close=async()=>{rpc.emit('disconnect');};rpc.verifyReadingThread=async()=>{};
  rpc.request=async(method,params)=>{calls.push({method,params});
+  if(method==='account/read')return{requiresOpenaiAuth:true,account:{type:'chatgpt'}};
+  if(method==='model/list')return{data:[{model:'synthetic-model',displayName:'Synthetic model',isDefault:true,defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'low'},{reasoningEffort:'medium'}]}]};
   if(method==='thread/start'||method==='thread/resume')return{thread:{id:params.threadId||`thread-${++threads}`},sandbox:{type:'readOnly'},approvalsReviewer:'user'};
   if(method==='turn/start'){const turn={id:`turn-${++turns}`,status:'inProgress',items:[]};history.set(params.threadId,[...(history.get(params.threadId)||[]),turn]);queueMicrotask(()=>rpc.emit('notification',{method:'turn/started',params:{threadId:params.threadId,turn}}));return{turn};}
   if(method==='turn/interrupt'){const turn=history.get(params.threadId)?.find(t=>t.id===params.turnId);if(turn){turn.status='interrupted';rpc.emit('notification',{method:'turn/completed',params:{threadId:params.threadId,turn}});}return{};}

@@ -71,3 +71,19 @@ test('approval persistence failure rejects permission and interrupts without esc
  assert.doesNotThrow(()=>f.rpc.emit('request',{id:31,method:'item/fileChange/requestApproval',params:{threadId:'owned-thread',turnId:'turn-1'}}));
  assert.equal(f.calls.some(c=>c.id===31&&c.rejected),true);assert.equal(f.calls.some(c=>c.method==='turn/interrupt'),true);assert.equal(f.calls.some(c=>c.id===31&&c.result),false);
 });
+test('document tool requires per-turn opt-in and exposes denial in the same transcript',async()=>{
+ const f=fixture();let reads=0;f.s.readPages=async()=>{reads++;return{pages:[]};};await f.send();
+ f.rpc.emit('request',{id:50,method:'item/tool/call',params:{threadId:'owned-thread',turnId:'turn-1',callId:'read-1',tool:'xireader_read_pages',arguments:{pages:[1]}}});await Promise.all([...f.s.toolWork.values()]);
+ assert.equal(reads,0);assert.equal(f.s.view().turns[0].toolReads[0].status,'denied');assert.equal(f.calls.find(c=>c.id===50).result.success,false);
+});
+test('authorized document tool deduplicates calls and enforces the four-read budget',async()=>{
+ const f=fixture();let reads=0;f.s.readPages=async(args,binding)=>{reads++;assert.deepEqual(binding,f.binding);return{pages:args.pages.map(page=>({page,text:'Synthetic evidence'}))};};
+ await f.s.send({requestId:'reading-0001',question:'Read prior definition',snapshot:{...f.binding,included:true,allowDocumentRead:true}});
+ const invoke=async(id,callId,pages=[1])=>{f.rpc.emit('request',{id,method:'item/tool/call',params:{threadId:'owned-thread',turnId:'turn-1',callId,tool:'xireader_read_pages',arguments:{pages}}});await Promise.all([...f.s.toolWork.values()]);await Promise.resolve();};
+ await invoke(51,'read-1');await invoke(52,'read-1');assert.equal(reads,1);await invoke(53,'read-1',[2]);assert.equal(f.calls.find(c=>c.id===53).result.success,false);assert.equal(reads,1);
+ for(let i=2;i<=5;i++)await invoke(60+i,`read-${i}`);assert.equal(reads,4);assert.equal(f.calls.find(c=>c.id===65).result.success,false);assert.equal(f.s.view().turns[0].toolReads.filter(t=>t.status==='completed').length,4);
+});
+test('stop during a document read does not send late PDF content to the model',async()=>{
+ const f=fixture();let release;f.s.readPages=()=>new Promise(r=>{release=r;});await f.s.send({requestId:'reading-0001',question:'Read',snapshot:{...f.binding,included:true,allowDocumentRead:true}});
+ f.rpc.emit('request',{id:80,method:'item/tool/call',params:{threadId:'owned-thread',turnId:'turn-1',callId:'read-delayed',tool:'xireader_read_pages',arguments:{pages:[1]}}});assert.ok(release);await f.s.stop();release({pages:[{page:1,text:'Must not be sent'}]});await Promise.all([...f.s.toolWork.values()]);await Promise.resolve();const response=f.calls.find(c=>c.id===80).result;assert.equal(response.success,false);assert.doesNotMatch(JSON.stringify(response),/Must not be sent/);
+});

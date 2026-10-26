@@ -20,9 +20,9 @@ export async function readingWorkspaceWorkflow({ context, base, onPreview }) {
   const openDiscussion = async (target, index = 0) => {
     await openNotes(target); await target.getByRole('tab', { name: /^批注/ }).click();
     await target.locator(`[data-annotation-id="${annotations[index].id}"]`).getByRole('button', { name: /讨论这条批注/ }).click();
-    await expect(target.locator(`.thread-source-card[data-source-annotation="${annotations[index].id}"]`)).toBeVisible();
+    await expect(target.locator(`.codex-active-anchor[data-codex-annotation="${annotations[index].id}"]`)).toBeVisible();
   };
-  const question = target => target.getByRole('textbox', { name: '批注讨论问题', exact: true });
+  const question = target => target.getByRole('textbox', { name: '发给 Codex 的问题', exact: true });
   try {
     page.on('pageerror', failure => errors.push(failure.message));
     await page.setViewportSize({ width: 1440, height: 950 });
@@ -49,7 +49,7 @@ export async function readingWorkspaceWorkflow({ context, base, onPreview }) {
     for (const width of [1440, 1280, 1000, 784, 780, 480]) {
       await page.setViewportSize({ width, height: 950 });
       await openNotes(page);
-      if (width <= 1100) assert.equal(await page.locator('#library-panel:not(.collapsed)').count(), 0);
+      if (width <= 1100) await expect(page.locator('#library-panel:not(.collapsed)')).toHaveCount(0);
       assert.ok(await page.evaluate(() => window.document.documentElement.scrollWidth <= window.innerWidth + 1));
       const status = page.locator('.workspace-status-row .codex-status');
       await expect(status).toBeVisible();
@@ -65,57 +65,29 @@ export async function readingWorkspaceWorkflow({ context, base, onPreview }) {
     await page.setViewportSize({ width: 1440, height: 950 });
     await page.getByRole('tab', { name: '笔记', exact: true }).click();
     await expect(notes).toHaveValue('Synthetic mounted notebook draft'); await notes.fill(''); await page.getByRole('button', { name: '保存', exact: true }).click();
-    await openDiscussion(page, 0);
-    const source = page.locator('.thread-source-card:visible'); await expect(source).toContainText(annotations[0].quote);
-    await question(page).fill('Which premise supports this synthetic claim?');
-    await page.getByRole('button', { name: '核对参考', exact: true }).click();
-    await expect(page.locator('.context-summary:visible')).toContainText('1 页');
-    await page.getByRole('button', { name: '保存问题到本机', exact: true }).click();
-    await expect(page.locator('.thread-message.user:visible')).toHaveCount(1);
-    await expect(page.locator('.thread-notice:visible')).toContainText('尚未发送');
-    await page.getByRole('button', { name: '复制给 Codex', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: '复制给 Codex 的提问', exact: true })).toHaveValue(new RegExp(annotations[0].quote.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-    await page.getByRole('button', { name: '收起', exact: true }).click();
-    await page.getByText('手动保存已核对的回答', { exact: true }).click();
-    const answer = page.getByRole('textbox', { name: '手动保存的回答', exact: true }); await answer.fill('Synthetic, manually reviewed answer. Not a model response.');
-    const answerSave = page.getByRole('button', { name: '保存已核对回答', exact: true }); await expect(answerSave).toBeDisabled();
-    await page.getByRole('checkbox', { name: /我已核对回答与原文/ }).check(); await answerSave.click();
-    await expect(page.locator('.thread-message.assistant:visible')).toHaveCount(1);
-    // A storage failure must not lose A when switching to B or collapsing panels.
-    await page.evaluate(() => { const original = Storage.prototype.setItem; window.__restoreDiscussionStorage = () => { Storage.prototype.setItem = original; }; Storage.prototype.setItem = function(key, value) { if (key.startsWith('paperdesk-discussion-draft:')) throw new DOMException('Synthetic quota', 'QuotaExceededError'); return original.call(this, key, value); }; });
-    await question(page).fill('Memory-only question A'); await expect(page.getByRole('alert').filter({ hasText: '讨论草稿无法暂存' })).toBeVisible();
-    await openDiscussion(page, 1); await question(page).fill('Memory-only question B');
-    await page.getByLabel('批注讨论', { exact: true }).selectOption({ label: `第 1 页 · ${annotations[0].quote.slice(0, 32)}` });
-    await expect(question(page)).toHaveValue('Memory-only question A');
-    await page.getByRole('button', { name: '关闭阅读工作区', exact: true }).click(); await openNotes(page); await expect(question(page)).toHaveValue('Memory-only question A');
-    await page.evaluate(() => window.__restoreDiscussionStorage());
-    // An older list reply must neither roll back a completed save nor leave loading stuck after selection changes.
-    await question(page).fill('Question saved while an old list reply waits');
-    await page.getByRole('button', { name: '核对参考', exact: true }).click();
-    await expect(page.locator('.context-summary:visible')).toBeVisible();
-    let releaseList, listCaptured;
-    const captured = new Promise(resolve => { listCaptured = resolve; });
-    const heldList = new Promise(resolve => { releaseList = resolve; });
-    const listRoute = url => url.origin === base && url.pathname === `/api/documents/${document.id}/threads`;
-    await page.route(listRoute, async route => { const response = await route.fetch(); listCaptured(); await heldList; await route.fulfill({ response }); });
-    await page.getByRole('button', { name: '刷新讨论列表，保留草稿', exact: true }).click(); await captured;
-    await page.getByRole('button', { name: '保存问题到本机', exact: true }).click();
-    await expect(page.locator('.thread-message.user:visible')).toHaveCount(2);
-    await page.getByLabel('批注讨论', { exact: true }).selectOption({ label: `第 1 页 · ${annotations[1].quote.slice(0, 32)}` });
-    releaseList(); await expect(page.getByText('正在读取本机讨论…', { exact: true })).toBeHidden(); await page.unroute(listRoute);
-    await expect(page.locator('.thread-source-card:visible')).toContainText(annotations[1].quote);
-    await page.getByLabel('批注讨论', { exact: true }).selectOption({ label: `第 1 页 · ${annotations[0].quote.slice(0, 32)}` });
-    await expect(page.locator('.thread-message.user:visible')).toHaveCount(2);
-    await question(page).fill('First window question');
-    const second = await context.newPage(); pages.push(second); second.on('pageerror', failure => errors.push(failure.message));
-    await second.goto(`${base}/?document=${document.id}&libraryId=${libraryId}&page=1`); await openDiscussion(second, 0); await question(second).fill('Second window question');
-    await question(page).fill('');
-    await expect(question(second)).toHaveValue('Second window question');
-    const slots = await second.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('paperdesk-discussion-draft:')).map(([,value]) => JSON.parse(value).draft.question));
-    assert.ok(slots.includes('Second window question'));
-    await question(second).fill('');
-    await openDiscussion(page, 1); await question(page).fill('');
-    assert.deepEqual(errors, []);
-    console.log('PASS: workspace widths, keyboard resizing, mounted notes, anchored local discussion/manual review, quota-safe thread switches and independent window drafts');
+    assert.equal(await page.getByRole('tab',{name:'讨论',exact:true}).count(),0,'Manual discussion is not a parallel chat panel');
+    const legacy=(await json(`/documents/${document.id}/threads`,{libraryId,pdfSha256:document.pdfSha256,annotationId:annotations[0].id,requestId:randomUUID()},'POST')).thread;
+    await json(`/documents/${document.id}/threads/${legacy.id}/messages`,{libraryId,pdfSha256:document.pdfSha256,expectedRevision:0,requestId:randomUUID(),role:'assistant',content:'Historical manually saved answer, not a model response.',reviewed:true},'POST');
+    const oldExport=await json(`/documents/${document.id}/threads/export?libraryId=${libraryId}`);
+    const legacyKey=`paperdesk-discussion-draft:v1:${libraryId}:${document.id}:${legacy.id}:owner:synthetic-history`;
+    const legacyValue=JSON.stringify({libraryId,documentId:document.id,threadId:legacy.id,draft:{question:'Historical unsent question',answer:'Historical unsent answer',scope:'selection',pages:'',reviewed:false,pending:null}});
+    await page.evaluate(({key,value})=>localStorage.setItem(key,value),{key:legacyKey,value:legacyValue});
+    await openDiscussion(page,0);
+    const session=await page.getByLabel('选择 Codex 会话').inputValue();assert.ok(session);
+    await question(page).fill('Keep this exact draft across annotation references');
+    await openDiscussion(page,1);await expect(question(page)).toHaveValue('Keep this exact draft across annotation references');await expect(page.getByLabel('选择 Codex 会话')).toHaveValue(session);
+    await openDiscussion(page,1);await expect(page.getByLabel('选择 Codex 会话')).toHaveValue(session);await expect(question(page)).toHaveValue('Keep this exact draft across annotation references');
+    let sessions=(await json(`/documents/${document.id}/codex/sessions?libraryId=${libraryId}`)).sessions;assert.equal(sessions.length,1);assert.equal(sessions[0].turnCount,0,'Discuss never sends automatically');
+    await page.getByRole('button',{name:'核对上下文',exact:true}).click();await expect(page.locator('.codex-snapshot')).toContainText(annotations[1].quote);
+    await page.getByRole('button',{name:'关闭阅读工作区',exact:true}).click();await openNotes(page);await expect(question(page)).toHaveValue('Keep this exact draft across annotation references');
+    await page.evaluate(()=>{const original=Storage.prototype.setItem;window.__restoreDiscussionStorage=()=>Storage.prototype.setItem=original;Storage.prototype.setItem=function(key,value){if(key.startsWith('paperdesk-discussion-draft:'))throw new DOMException('Synthetic quota','QuotaExceededError');return original.call(this,key,value);};});
+    await question(page).fill('Memory-only unified draft');await expect(page.getByRole('alert').filter({hasText:'输入无法暂存'})).toBeVisible();await page.getByRole('button',{name:'新对话',exact:true}).click();await expect(question(page)).toHaveValue('Memory-only unified draft');await expect(page.getByLabel('选择 Codex 会话')).toHaveValue(session);
+    await openDiscussion(page,0);await expect(question(page)).toHaveValue('Memory-only unified draft');await page.evaluate(()=>window.__restoreDiscussionStorage());await question(page).fill('Recovered unified draft');
+    await page.getByRole('button',{name:'新对话',exact:true}).click();await expect(question(page)).toHaveValue('');await page.getByLabel('选择 Codex 会话').selectOption(session);await expect(question(page)).toHaveValue('Recovered unified draft');
+    const second=await context.newPage();pages.push(second);second.on('pageerror',failure=>errors.push(failure.message));await second.goto(`${base}/?document=${document.id}&libraryId=${libraryId}&page=1`);await openDiscussion(second,1);await expect(second.getByLabel('选择 Codex 会话')).toHaveValue(session);await expect(question(second)).toHaveValue('');await question(second).fill('Independent second-window draft');await expect(question(page)).toHaveValue('Recovered unified draft');
+    await question(page).fill('');await question(second).fill('');
+    await page.getByRole('tab',{name:/^批注/}).click();const card=page.locator(`[data-annotation-id="${annotations[0].id}"]`);await card.getByText('历史资料（旧讨论与草稿，只读）',{exact:true}).click();await expect(card).toContainText('Historical manually saved answer, not a model response.');await expect(card).toContainText('非模型自动记录');await expect(card.getByLabel('旧讨论草稿 1')).toHaveValue('Historical unsent question\n\nHistorical unsent answer');
+    assert.equal(await page.evaluate(key=>localStorage.getItem(key),legacyKey),legacyValue);assert.deepEqual(await json(`/documents/${document.id}/threads/export?libraryId=${libraryId}`),oldExport,'History viewing does not migrate or rewrite old records');
+    assert.deepEqual(errors,[]);console.log('PASS: workspace layout, same composer/session across annotation A/B, no automatic sends, quota-safe switching, independent window drafts and lossless read-only legacy history');
   } finally { for (const target of pages) await target.close(); }
 }

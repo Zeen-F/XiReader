@@ -35,7 +35,7 @@ export default function Reader({ readingSnapshotRef, document, page, onPage, ann
   const focusAnchor = useRef(null), lastFocusedNavigation = useRef(null);
   const historyViewports = useRef(new Map()), pendingViewport = useRef(null), previousHistoryIndex = useRef(historyState?.index);
   const positionKey = JSON.stringify([historyState?.index, document.id, page, sourceFocus?.captureId, focusedAnnotation, find]);
-  const latest = useRef(null);
+  const latest = useRef(null), chatFocusHandoff = useRef(false);
   latest.current = { documentId: document.id, pdfSha256: document.pdfSha256, page, onPage, onSelection, selection, selectionLocked, regionMode, mode, count, pageCount: document.pageCount, positionKey };
   const currentStart = groupStart(page, count), currentIndex = (currentStart - 1) / count;
   const groups = useMemo(() => Array.from({ length: Math.ceil(document.pageCount / count) }, (_, index) => groupGeometry({
@@ -193,11 +193,14 @@ export default function Reader({ readingSnapshotRef, document, page, onPage, ann
       if (latest.current.selectionLocked || latest.current.regionMode) return;
       const { result, crossPage } = getPdfSelection();
       setSelectionError(crossPage ? '请在同一页内选择文字。跨页选区不能保存为批注。' : '');
-      if(!result&&owner.activeElement?.closest?.('.codex-chat')&&!crossPage)return;
+      // A clicked chat control may unmount itself before selectionchange fires.
+      // Retain its focus ownership until the next explicit pointer/focus target.
+      if(!result&&(chatFocusHandoff.current||owner.activeElement?.closest?.('.codex-chat'))&&!crossPage)return;
       acceptSelection(result);
     };
     const schedule = () => { cancelAnimationFrame(selectionFrame.current); selectionFrame.current = requestAnimationFrame(capture); };
     const down = event => {
+      chatFocusHandoff.current=Boolean(event.target.closest?.('.codex-chat'));
       if (event.target.closest?.('.region-selection-layer') && scrollRef.current.contains(event.target)) { dragging.current = true; return; }
       const layer = endpointLayer(event.target);
       if (!layer || !scrollRef.current.contains(layer) || latest.current.regionMode) return;
@@ -208,10 +211,13 @@ export default function Reader({ readingSnapshotRef, document, page, onPage, ann
       for (const tile of tiles.current.values()) tile.text.classList.remove('selecting');
       schedule();
     };
+    const focus = event => {if(event.target!==owner.body)chatFocusHandoff.current=Boolean(event.target.closest?.('.codex-chat'));};
+    owner.addEventListener('focusin',focus);
     owner.addEventListener('selectionchange', schedule); owner.addEventListener('pointerdown', down);
     owner.addEventListener('pointerup', finish); owner.addEventListener('keyup', finish); window.addEventListener('blur', finish);
     return () => {
       cancelAnimationFrame(selectionFrame.current);
+      owner.removeEventListener('focusin',focus);
       owner.removeEventListener('selectionchange', schedule); owner.removeEventListener('pointerdown', down);
       owner.removeEventListener('pointerup', finish); owner.removeEventListener('keyup', finish); window.removeEventListener('blur', finish);
     };

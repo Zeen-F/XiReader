@@ -1,3 +1,4 @@
+import {codexMessageSources} from '../shared/codex-message-source.mjs';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Check, LoaderCircle, Save, AlertCircle } from 'lucide-react';
 import { mergeNotes, MAX_NOTE_LENGTH } from '../shared/notes.mjs';
@@ -14,7 +15,7 @@ async function requestDocument(id, libraryId, body) {
 }
 const vaultVersionConflictCodes = new Set(['NOTES_VERSION_CONFLICT', 'VAULT_FILE_CONFLICT']);
 
-const Notes = forwardRef(function Notes({ document, libraryId, onSaved, onError, onDirtyChange, storageMode = 'library' }, ref) {
+const Notes = forwardRef(function Notes({ document, libraryId, onSaved, onError, onDirtyChange, storageMode = 'library', onOpenCodexSource }, ref) {
   const [drafts] = useState(() => createNoteDraftStore({ libraryId, owner: draftSession }));
   const boundDocument = useRef(document.id), boundLibrary = useRef(libraryId);
   const scope = useRef(null); scope.current = { libraryId, documentId: document.id };
@@ -109,7 +110,13 @@ const Notes = forwardRef(function Notes({ document, libraryId, onSaved, onError,
     return work;
   };
   const saveRef = useRef(save); saveRef.current = save;
-  useImperativeHandle(ref, () => ({ flush: () => saveRef.current(), isDirty: () => dirty() }));
+  useImperativeHandle(ref, () => ({ flush: () => saveRef.current(), isDirty: () => dirty(), appendFromCodex: async(block,source)=>{
+    await saveRef.current();requireScope();if(dirty())throw new Error('笔记草稿尚未保存，未追加回答。');
+    const next=await requestDocument(boundDocument.current,boundLibrary.current);requireScope();if(dirty())throw new Error('读取期间笔记有新草稿，请先保存后重试。');
+    acceptExternal(next);if(latest.current.includes(source))return;
+    const combined=[latest.current,block].filter(Boolean).join('\n\n');if(combined.length>MAX_NOTE_LENGTH)throw new Error('笔记达到容量上限，未追加回答。');
+    change(combined);await saveRef.current();if(dirty())throw new Error('回答仍在笔记草稿中，请核对保存结果。');
+  } }));
   useEffect(() => { acceptExternal(document); }, [document.notesRevision]);
   useEffect(() => { if (conflicted.current) preserveVaultConflict(); }, [storageMode]);
   useEffect(() => {
@@ -183,6 +190,7 @@ const Notes = forwardRef(function Notes({ document, libraryId, onSaved, onError,
     {conflict && <div className="notes-conflict" role="alert"><p>已保存的笔记有新版本。你的草稿仍在这里，自动保存已暂停。</p><button className="text-button" disabled={recovering} onClick={loadSaved}>{recovering ? '正在保留草稿…' : '保留草稿并载入已保存笔记'}</button></div>}
     <label className="notes-field"><textarea aria-label="笔记" maxLength={MAX_NOTE_LENGTH} spellCheck="false" value={text} disabled={recovering || !scopeReady()} onChange={event => change(event.target.value)} placeholder="记录你的想法…"/><span className="word-count">{text.length} 字符</span></label>
     <div className={`save-row ${status === 'error' ? 'save-error' : ''}`}><span role="status">{status === 'saved' ? <Check size={14}/> : status === 'saving' ? <LoaderCircle size={14} className="spin"/> : status === 'error' ? <AlertCircle size={14}/> : <span className="status-dot"/>}{({ saved: storageMode === 'vault' ? '已保存到 Obsidian 仓库' : '已保存到本机', saving: '正在保存…', pending: '等待保存…', error: conflict ? '版本冲突，草稿已保留' : '保存失败，草稿已保留' })[status]}</span><button className="text-button" disabled={conflict || recovering || !scopeReady()} onClick={() => save().catch(error => onError(error.message))}><Save size={14}/> 保存</button></div>
+    {codexMessageSources(text).map(source=><button className="text-button" key={source.url} onClick={()=>onOpenCodexSource?.(source)}>查看 Codex 原消息</button>)}
     {saveError && !conflict && <p className="inline-error notes-save-failure" role="alert">{saveError}</p>}
     {storageError && <p role="alert" className="inline-error">浏览器草稿存储不可用或已满，内容仍在编辑区。请点击保存并确认成功后再关闭页面。</p>}
     {preserved.length > 0 && <details className="preserved-drafts"><summary>查看保留的草稿（{preserved.length}）</summary>{preserved.map((entry, index) => <label key={entry.key}>草稿 {index + 1}<textarea aria-label={`保留的笔记草稿 ${index + 1}`} readOnly value={entry.text}/></label>)}</details>}

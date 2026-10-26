@@ -68,3 +68,22 @@ test('explicit recovery replaces a disconnected CLI and reconciles only the owne
  };f.replaceRuntime(next.rpc);
  const recovered=await f.json(`${route}/recover`,'POST',{libraryId:f.libraryId});assert.equal(f.starts,2);assert.equal(recovered.session.turns[0].status,'completed');assert.equal(recovered.session.turns[0].items[0].text,'Recovered after CLI exit');assert.equal(next.calls.some(c=>c.method==='turn/start'),false);assert.equal(next.calls.find(c=>c.method==='thread/resume').params.threadId,sent.session.threadId);
 });
+
+test('closing runtime detaches its orphan-request guard before another runtime reuses the transport',async t=>{
+ const f=await fixture(t),d=await f.upload(),s=await f.create(d),route=`${f.base(d)}/sessions/${s.id}`;
+ const sent=await f.json(`${route}/turns`,'POST',await f.send(d,s));f.mock.finish(sent.session.threadId);
+ await f.stop();assert.equal(f.mock.rpc.listenerCount('request'),0);assert.equal(f.mock.rpc.listenerCount('notification'),0);
+ await f.start();const resumed=await f.json(`${route}/turns`,'POST',await f.send(d,s));
+ f.mock.rpc.emit('request',{id:9123,method:'item/tool/call',params:{threadId:resumed.session.threadId,turnId:resumed.session.turns.at(-1).turnId,callId:'resumed-denied',tool:'xireader_read_pages',arguments:{pages:[1]}}});
+ await new Promise(resolve=>setImmediate(resolve));const responses=f.mock.calls.filter(c=>c.id===9123);assert.equal(responses.length,1);assert.equal(responses[0].result.success,false);assert.match(responses[0].result.contentItems[0].text,/没有允许/);
+ f.mock.finish(resumed.session.threadId);
+});
+
+test('connection check sends no model prompt, and selected model/effort reach the owned turn only after validation',async t=>{
+ const f=await fixture(t),d=await f.upload(),s=await f.create(d),route=`${f.base(d)}/sessions/${s.id}`;
+ assert.equal((await f.json('/codex/connection')).state,'disconnected');assert.equal(f.starts,0);
+ const connection=await f.json('/codex/connection','POST',{});assert.equal(connection.state,'ready');assert.equal(f.mock.calls.some(c=>c.method==='turn/start'),false);
+ const body=await f.send(d,s);await f.json(`${route}/turns`,'POST',{...body,modelSelection:{model:'fake',effort:'ultra'}},400);assert.equal(f.mock.calls.some(c=>c.method==='turn/start'),false);
+ const selection={model:'synthetic-model',effort:'low'};const sent=await f.json(`${route}/turns`,'POST',{...body,modelSelection:selection});const call=f.mock.calls.find(c=>c.method==='turn/start');assert.equal(call.params.model,selection.model);assert.equal(call.params.effort,'low');assert.deepEqual(sent.session.turns[0].modelSelection,selection);
+ f.mock.finish(sent.session.threadId);await f.json(`${route}/turns`,'POST',{...body,modelSelection:{...selection,effort:'medium'}},409);
+});

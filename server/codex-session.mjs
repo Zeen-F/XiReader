@@ -2,13 +2,14 @@ import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import { deniedApproval, readingThreadParams } from './codex-rpc.mjs';
 import { readingPrompt } from './codex-reading-context.mjs';
+import {READING_TOOL} from './codex-document-tool.mjs';
 import { readingTurnInput } from './codex-input.mjs';
 
 const ACTIVE = new Set(['preparing','sending','running','stopping','approval']);
 const MAX_ANSWER = 100_000;
 export class CodexReadingSession extends EventEmitter {
-  constructor({ rpc, cwd, state, save }) {
-    super(); this.rpc=rpc; this.cwd=cwd; this.save=save; this.state=structuredClone(state); this.bound=false; this.binding=null;
+  constructor({ rpc, cwd, state, save, readPages }) {
+    super(); this.readPages=readPages;this.toolWork=new Map(); this.rpc=rpc; this.cwd=cwd; this.save=save; this.state=structuredClone(state); this.bound=false; this.binding=null;
     this.cancelRequested=false; this.interrupted=new Set(); this.stopTimers=new Map(); this.operation=false; this.disposed=false;
     this.notification=message=>this.receive(message);
     this.request=message=>{
@@ -38,28 +39,28 @@ export class CodexReadingSession extends EventEmitter {
     if(this.binding)return this.binding;
     this.binding=(async()=>{
       await this.rpc.start();
-      const params=readingThreadParams(this.cwd);
+      const params={...readingThreadParams(this.cwd),dynamicTools:[READING_TOOL]};
       const response=this.state.threadId
         ?await this.rpc.request('thread/resume',{threadId:this.state.threadId,cwd:this.cwd,sandbox:params.sandbox,approvalPolicy:params.approvalPolicy,approvalsReviewer:params.approvalsReviewer,developerInstructions:params.developerInstructions,excludeTurns:true})
         :await this.rpc.request('thread/start',params);
       if(!response?.thread?.id||this.state.threadId&&response.thread.id!==this.state.threadId)throw new Error('Codex 返回了不匹配的会话身份。');
       if(response.sandbox?.type!=='readOnly'||response.approvalsReviewer!=='user')throw new Error('Codex 未确认所需只读权限；没有发送问题。');
-      this.state.threadId=response.thread.id;this.persist();
+      if(!this.state.threadId)this.state.readingToolVersion=1;this.state.threadId=response.thread.id;this.persist();
       await this.rpc.verifyReadingThread?.(response.thread.id);this.bound=true;
     })();
     try{await this.binding;}finally{this.binding=null;}
   }
-  async send({requestId,question,snapshot,previewId,beforeDispatch}){
+  async send({requestId,question,snapshot,previewId,beforeDispatch,modelSelection}){
     if(this.disposed)throw new Error('会话不可用，请先恢复本机存储。');
     this.assertSnapshot(snapshot);
     if(typeof requestId!=='string'||!/^[a-zA-Z0-9-]{8,80}$/.test(requestId))throw new Error('缺少有效发送标识。');
-    const prompt=readingPrompt(question,snapshot),fingerprint=createHash('sha256').update(prompt).digest('hex');
+    const prompt=readingPrompt(question,snapshot),fingerprint=createHash('sha256').update(modelSelection?JSON.stringify({prompt,modelSelection}):prompt).digest('hex');
     const existing=this.state.turns.find(t=>t.requestId===requestId);
     if(existing){if(existing.fingerprint!==fingerprint)throw new Error('同一请求不能携带不同内容。');return this.view();}
     if(this.operation||this.active()||this.state.turns.some(t=>t.status==='uncertain'))throw new Error('请先等待或核对上一轮回答。');
     if(this.state.turns.length>=100)throw new Error('本会话已达 100 轮，请另开会话；原记录保留。');
     this.operation=true;this.cancelRequested=false;
-    const turn={requestId,...(previewId?{previewId}:{}),fingerprint,question,snapshot:structuredClone(snapshot),status:'preparing',turnId:null,items:[],approvals:[],createdAt:new Date().toISOString()};
+    const turn={requestId,...(previewId?{previewId}:{}),fingerprint,question,snapshot:structuredClone(snapshot),...(modelSelection?{modelSelection}:{}),status:'preparing',turnId:null,items:[],approvals:[],toolReads:[],createdAt:new Date().toISOString()};
     this.state.turns.push(turn);
     let dispatched=false;
     try{
@@ -68,7 +69,7 @@ export class CodexReadingSession extends EventEmitter {
       await beforeDispatch?.();
       if(this.cancelRequested){turn.status='interrupted';this.persist();return this.view();}
       turn.status='sending';this.persist();dispatched=true;
-      const response=await this.rpc.request('turn/start',{threadId:this.state.threadId,...readingTurnInput(question,snapshot,requestId),environments:[],approvalPolicy:'on-request',approvalsReviewer:'user',sandboxPolicy:{type:'readOnly',networkAccess:false}});
+      const response=await this.rpc.request('turn/start',{threadId:this.state.threadId,...(modelSelection?{model:modelSelection.model,effort:modelSelection.effort}:{}),...readingTurnInput(question,snapshot,requestId),environments:[],approvalPolicy:'on-request',approvalsReviewer:'user',sandboxPolicy:{type:'readOnly',networkAccess:false}});
       if(!response?.turn?.id)throw new Error('Codex 未返回轮次身份。');
       if(turn.turnId&&turn.turnId!==response.turn.id)throw new Error('Codex 返回了不匹配的轮次身份。');
       turn.turnId=response.turn.id;
@@ -116,10 +117,35 @@ export class CodexReadingSession extends EventEmitter {
     if(p?.threadId!==this.state.threadId)return;
     if(!turn||!p.turnId||turn.turnId&&p.turnId!==turn.turnId){this.rpc.rejectRequest(message.id,'Request is outside this XiReader conversation.');return;}
     if(!turn.turnId)turn.turnId=p.turnId;
+    if(message.method==='item/tool/call'){turn.started=true;void this.handleReadingTool(message,turn);return;}
     const denial=deniedApproval(message.method);
     if(!denial){this.rpc.rejectRequest(message.id);turn.error='Codex 请求了当前只读聊天未支持的操作；未授予权限。';this.persist();return;}
     turn.approvals.push({id:message.id,method:message.method,description:'此请求需要额外权限。XiReader 阅读聊天不授予命令、写入或外部访问权限；可拒绝并继续，或停止回答。'});
     turn.status='approval';this.persist();
+  }
+  async handleReadingTool(message,turn){
+    const p=message.params,key=`${turn.requestId}:${p.callId}`;
+    const respond=result=>{try{this.rpc.respond(message.id,result);}catch{}};
+    const failure=text=>({success:false,contentItems:[{type:'inputText',text}]});
+    if(p.tool!=='xireader_read_pages'||typeof p.callId!=='string'||p.callId.length>200){respond(failure('不支持的工具；未读取资料。'));return;}
+    const signature=JSON.stringify(p.arguments),existing=(turn.toolReads||[]).find(t=>t.id===p.callId);
+    if(existing&&existing.signature!==signature){respond(failure('同一工具调用不能改变页码。'));return;}
+    if(this.toolWork.has(key)){respond(await this.toolWork.get(key));return;}
+    if(existing){respond(existing.status==='completed'?{success:true,contentItems:[{type:'inputText',text:JSON.stringify(existing.output)}]}:failure(existing.error||'上次补读结果未确认，不自动重读。'));return;}
+    turn.toolReads??=[];
+    if(turn.toolReads.length>=12){respond(failure('本轮工具请求过多，未读取资料。'));return;}
+    const record={id:p.callId,name:p.tool,signature,pages:Array.isArray(p.arguments?.pages)?p.arguments.pages.filter(Number.isInteger).slice(0,3):[],status:'running',output:null};turn.toolReads.push(record);
+    const work=(async()=>{
+      try{
+        if(this.disposed||this.cancelRequested||!ACTIVE.has(turn.status))throw new Error('本轮已停止，未补读。');
+        if(!turn.snapshot.included||turn.snapshot.allowDocumentRead!==true){record.status='denied';throw new Error('用户没有允许本轮补读文献；请在后续消息明确勾选允许后再请求。');}
+        if(turn.toolReads.filter(t=>t.status==='completed'||t.status==='running').length>4)throw new Error('本轮最多补读 4 次，未继续读取。');
+        this.persist();if(!this.readPages)throw new Error('当前运行环境没有可用的本篇文献读取接口。');
+        const output=await this.readPages(p.arguments,this.state.binding);
+        if(this.cancelRequested||!ACTIVE.has(turn.status)||this.disposed)throw new Error('补读期间本轮已停止；结果未发送给模型。');
+        record.output=output;record.status='completed';this.persist();return{success:true,contentItems:[{type:'inputText',text:JSON.stringify(output)}]};
+      }catch(error){record.status=record.status==='denied'?'denied':'failed';record.error=error.message;try{this.persist();}catch{}return failure(record.error);}
+    })();this.toolWork.set(key,work);respond(await work);
   }
   deny(id){
     const turn=this.active(),approval=turn?.approvals.find(a=>a.id===id);

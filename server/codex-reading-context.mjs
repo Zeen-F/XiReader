@@ -11,18 +11,19 @@ const bounded = (text, limit) => ({ text: text.slice(0, limit), truncated: text.
 // not proof that the complete indexed page text was visible on screen.
 export async function buildReadingSnapshot({ request, libraryId, document, verifyDocument, readPage, readAnnotation, now = Date.now() }) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) invalid('缺少阅读快照。');
-  const allowed = new Set(['libraryId','documentId','pdfSha256','capturedAt','page','visible','selection','annotationId','includeContext','mode']);
+  const allowed = new Set(['libraryId','documentId','pdfSha256','capturedAt','page','visible','selection','annotationId','includeContext','mode','allowDocumentRead']);
   if (Object.keys(request).some(key=>!allowed.has(key))) invalid('阅读快照包含不支持的字段。');
   if (request.libraryId !== libraryId || request.documentId !== document.id || request.pdfSha256 !== document.sha256) invalid('文献库或 PDF 身份已变化，请重新核对。',409);
   if (!Number.isFinite(request.capturedAt) || now-request.capturedAt > READING_CONTEXT_LIMITS.ageMs || request.capturedAt-now > 2000) invalid('阅读快照已过期，请刷新当前阅读位置。',409);
   const page = value => { if(!Number.isInteger(value)||value<1||value>document.page_count)invalid('阅读快照页码无效。');return value; };
   page(request.page);
+  if(request.allowDocumentRead!==undefined&&typeof request.allowDocumentRead!=='boolean')invalid('补读权限必须明确选择。');
   if (typeof request.includeContext !== 'boolean') invalid('请明确是否附带阅读上下文。');
   if (!['follow','annotation'].includes(request.mode)) invalid('请选择跟随阅读或固定批注。');
   await verifyDocument(document);
   const result={schema:1,libraryId,documentId:document.id,pdfSha256:document.sha256,title:document.title,
     capturedAt:new Date(now).toISOString(),page:request.page,mode:request.mode,included:request.includeContext,pages:[],visible:[],selection:null,annotation:null,
-    limitations:[]};
+    allowDocumentRead:request.includeContext&&request.allowDocumentRead===true,pageCount:document.page_count,limitations:[]};
   if(request.includeContext){
     if(!Array.isArray(request.visible)||request.visible.length>READING_CONTEXT_LIMITS.pages)invalid('最多附带三个可见页面。');
     const seen=new Set();
