@@ -20,7 +20,7 @@ export async function readingWorkspaceWorkflow({ context, base, onPreview }) {
   const openDiscussion = async (target, index = 0) => {
     await openNotes(target); await target.getByRole('tab', { name: /^批注/ }).click();
     await target.locator(`[data-annotation-id="${annotations[index].id}"]`).getByRole('button', { name: /讨论这条批注/ }).click();
-    await expect(target.locator(`.codex-active-anchor[data-codex-annotation="${annotations[index].id}"]`)).toBeVisible();
+    await expect(target.locator(`.codex-annotation-chip[data-codex-annotation="${annotations[index].id}"]`)).toBeVisible();
   };
   const question = target => target.getByRole('textbox', { name: '发给 Codex 的问题', exact: true });
   try {
@@ -72,8 +72,14 @@ export async function readingWorkspaceWorkflow({ context, base, onPreview }) {
     const legacyKey=`paperdesk-discussion-draft:v1:${libraryId}:${document.id}:${legacy.id}:owner:synthetic-history`;
     const legacyValue=JSON.stringify({libraryId,documentId:document.id,threadId:legacy.id,draft:{question:'Historical unsent question',answer:'Historical unsent answer',scope:'selection',pages:'',reviewed:false,pending:null}});
     await page.evaluate(({key,value})=>localStorage.setItem(key,value),{key:legacyKey,value:legacyValue});
-    await openDiscussion(page,0);
-    const session=await page.getByLabel('选择 Codex 会话').inputValue();assert.ok(session);
+    const sessionEndpoint=`${base}/api/documents/${document.id}/codex/sessions`, listEndpoint=`${sessionEndpoint}?libraryId=${libraryId}`;
+    let createdSession=false, releaseList;const heldList=new Promise(resolve=>{releaseList=resolve;});
+    await page.route(sessionEndpoint,async route=>{const response=await route.fetch();createdSession=true;await route.fulfill({response});});
+    await page.route(listEndpoint,async route=>{if(createdSession)await heldList;await route.continue();});
+    let session;
+    try{await openDiscussion(page,0);session=await page.getByLabel('选择 Codex 会话').inputValue();assert.ok(session,'Newly created session stays selected while its history refresh is held');}
+    finally{releaseList();await page.unroute(sessionEndpoint);await page.unroute(listEndpoint);}
+
     await question(page).fill('Keep this exact draft across annotation references');
     await openDiscussion(page,1);await expect(question(page)).toHaveValue('Keep this exact draft across annotation references');await expect(page.getByLabel('选择 Codex 会话')).toHaveValue(session);
     await openDiscussion(page,1);await expect(page.getByLabel('选择 Codex 会话')).toHaveValue(session);await expect(question(page)).toHaveValue('Keep this exact draft across annotation references');

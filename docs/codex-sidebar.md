@@ -18,6 +18,16 @@ XiReader 的“Codex”页可直接调用本机已有 Codex CLI，流式显示�
 
 最多附带三页，每页 4000 字符，选文最多 4000 字符，批注评论最多 2000 字符；总快照上限约 19000 UTF-8 字节，进一步截断会在预览中说明。可见矩形来自阅读器，但文字是对应页面的有界文字层，**不是精确裁剪到可见矩形的逐字内容**。扫描 PDF 没有文字层时不假造文字；没有 OCR，也不发送页面图像。上下文作为协议 `additionalContext` 的 `untrusted` 资料分段传递，不能变成应用指令。只在用户明确点击发送时调用模型。
 
+## 交互与阅读连续性
+
+选区在本地立即显示紧凑引用框，包含页码、字符数、原文、展开及移除；捕获不会调用模型。移除后可直接重新划同一范围，转焦输入框、模型控件或保存确认时保留引用。PDF 浮动操作条进入聊天时收起，不覆盖核对和发送按钮，返回阅读器的新手势可再次打开。
+
+待附带引用与已发送消息的冻结来源分别呈现。用户问题是右侧有边框气泡，Codex 回答为左侧正文；过程默认折叠，连接事实与轮次状态分开。输入区保持紧凑，详情按需展开，模型和推理选择始终可见。山岚使用浅色配色；经典书桌的夜读主题通过实际主题控件启用。
+
+从笔记／批注回跳旧消息后，明确发送会解除旧定位并显示新轮次；停止状态仍属于该轮。被动流式更新不会强行拉走用户手动上滚的位置。保存确认使用可见的模态窗口，初始焦点在取消按钮；Escape 只作用该对话框，不折叠底层工作区，正在保存时不能丢弃操作。成功反馈位于对应回答旁并获得焦点。
+
+`node scripts/test-codex-ux.mjs` 使用合成 RPC 验证划选与焦点交接、同范围重划、紧凑视口按钮命中和时间线空间、保存确认／反馈、来源回跳后追问停止、被动流式滚动以及浅色／夜读键盘操作。它不是实际模型连通或原生成品验收的替代。
+
 ## 运行与权限
 
 - 使用公开 `codex app-server --listen stdio://`；不控制 Codex 桌面、不读取原生历史目录、不创建登录或持久凭据。当前协议已按 CLI 0.164.0 的本地 schema 核验。CLI 应已安装并由用户自行完成登录；找不到命令或认证失败时保留输入并报错。
@@ -64,3 +74,14 @@ XiReader 的“Codex”页可直接调用本机已有 Codex CLI，流式显示�
 - [Claudian](https://github.com/YishenTu/claudian/tree/b796b98977e5ffce349f695523efb14da78d482f)（MIT）：参考独立 app-server、线程和审批架构，以及发送瞬间选区快照。其普通侧栏选区机制不代表完整 PDF 页码／可见区域感知。
 - [Codex Panel 5.5.1](https://github.com/murashit/codex-panel/tree/f30b5411f4c969e1cb76c041c39b99187242ce75)（Apache-2.0）：参考不可信上下文分段、线程隔离和恢复；未照搬以整个 vault 为工作目录的默认方式。
 - [Codex app-server](https://github.com/openai/codex/tree/rust-v0.164.0/codex-rs/app-server)：实验协议可能变化；不兼容运行时需报错，不能扩大权限以继续。
+
+### Claudian 行为映射
+
+| Claudian 参考模块／行为 | XiReader 对应实现 | 验证 |
+| --- | --- | --- |
+| `ComposerSelections`、`SelectionController`、`context-tray.css`：本轮选区与焦点交接 | `Reader.jsx`、`CodexContextTray.jsx`：PDF 页码／原文引用，手势身份与移除重划 | 同一较长原文范围直接重划；输入／模型／确认框不丢引用；捕获无模型请求 |
+| `messages.css`、`response-blocks.css`、`toolcalls.css`：消息与过程层次 | `CodexChat.jsx`、`codex-chat.css`：用户气泡、回答正文、具名状态与折叠过程 | 窄栏实际点击、可见角色与结果；保存确认和成功焦点 |
+| `toolbar/model-selector.css`：输入旁模型选择 | `CodexConnection.jsx`：运行时模型／推理能力与连接事实 | 模拟与真实目录检查分别记录，不硬编码模型 |
+| `SessionModel`、`ChatSessionRuntime`：会话拥有连续历史 | 当前文献统一会话、批注作为每轮引用 | A/B 同线程、回跳旧来源后追问、停止和重启续聊 |
+
+以上为行为借鉴与 PDF 适配，没有复制 Claudian 或 Codex Panel 源码。
