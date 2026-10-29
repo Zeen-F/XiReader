@@ -1,18 +1,27 @@
 # 纸间 Paperdesk
 
-在本机阅读 PDF、划重点、记笔记，并把选中的证据带回写作。支持 Windows 桌面、Apple Silicon Mac 桌面和本机浏览器；可以使用独立文献库，也可以连接已有 Obsidian 知识库。
+[English](README.en.md) · [下载预览版](https://github.com/Zeen-F/XiReader/releases) · [使用指南](#阅读与记录) · [参与贡献](CONTRIBUTING.md)
 
-我是软件开发小白，这个软件是通过和 AI 对话、反复试用和修改，**vibecoding（vibe coding）** 出来的。最初只是想给自己做一个方便读 PDF、划重点和记笔记的工具，于是有了「纸间」。目前仍是预览版，欢迎反馈问题、提建议或提交改进。
+**在本机读论文、核对证据，再把选中的内容带入 Obsidian 和 Codex。**
+
+纸间是采用 MIT 许可证的 PDF 阅读与研究笔记工具，支持 Windows、Apple Silicon Mac 和本机浏览器。它把文字高亮、图表区域、评论和实际 PDF 页码关联起来，让阅读、讨论和写作都能回查来源；可以使用独立文献库，也可以连接已有 Obsidian 知识库。
+
+- **保留资料。** 普通阅读、搜索、批注和笔记在本机处理；Obsidian 中的源 PDF 原位阅读。
+- **主动共享。** 预览并确认所选文字或区域后再交给 Codex；内容搜索另有范围、时限和预算控制。
+- **回查证据。** 选区、页码和来源可交给[知识工作台](https://github.com/Zeen-F/knowledge-workbench)，用于科研笔记和人工审核草稿。
+- **持续维护。** 公开[版本记录](https://github.com/Zeen-F/XiReader/releases)、[合并记录](https://github.com/Zeen-F/XiReader/pulls?q=is%3Apr+is%3Amerged)和[跨平台检查](https://github.com/Zeen-F/XiReader/actions/workflows/ci.yml)便于核对改动与验证范围。
+
+这个项目来自作者日常阅读论文和整理笔记的需要，通过 AI 辅助开发、反复试用和修订逐步形成。目前仍是早期预览版；已实现的功能、自动检查和真实服务／宿主验收分别记录，欢迎反馈问题和提交改进。
 
 ## 下载、启动与升级
 
-本次版本为 **1.2.0-beta.6**，包含下文的阅读改进与可选山岚 V2 外观。[下载版本与校验值](https://github.com/Zeen-F/PDF_Vibecoding/releases/tag/v1.2.0-beta.6) 以 Release 页面实际提供的文件为准；源码更新不会自动升级旧安装包。
+本次版本为 **1.2.0-beta.6**，包含下文的阅读改进与可选山岚 V2 外观。[下载版本与校验值](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.6) 以 Release 页面实际提供的文件为准；源码更新不会自动升级旧安装包。
 
 | 入口 | 使用方法 |
 | --- | --- |
-| [Windows x64 ZIP](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
-| [macOS ARM64 DMG](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-mac-arm64.dmg) | 将 Paperdesk 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
-| [本机浏览器 ZIP](https://github.com/Zeen-F/PDF_Vibecoding/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
+| [Windows x64 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
+| [macOS ARM64 DMG](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-mac-arm64.dmg) | 将 Paperdesk 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
+| [本机浏览器 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
 
 升级前保存并正常退出旧应用，备份完整文献库。将新版完整应用目录放到固定位置，再更新原桌面快捷方式的目标和工作目录；不要把临时测试包作为长期入口，也不要覆盖或搬动文献库。没有自动更新。旧插件若占用应用文件，先正常断开连接再升级。
 
@@ -95,8 +104,8 @@ MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本�
 需要 Node.js 24+。首次获取源码后在项目目录运行；已有工作区直接使用原目录。以下为 Windows PowerShell 命令，macOS 使用 `npm` / `npx`：
 
 ```powershell
-git clone https://github.com/Zeen-F/PDF_Vibecoding.git
-cd PDF_Vibecoding
+git clone https://github.com/Zeen-F/XiReader.git
+cd XiReader
 npm.cmd ci
 npm.cmd run desktop
 ```
@@ -118,7 +127,7 @@ Windows 目录包入口为 `release/win-unpacked/Paperdesk.exe`。打包需要�
 - 双栏、脚注、公式及复杂文字层可能影响选文顺序，发送或保存引文前核对预览。100% 正常字号的 Windows 鼠标选文已验证；约 6px 微小字号的精确选文未验证。
 - 同一文献建议只在一个窗口编辑；没有多设备并发写入的一致性保证。Windows 桌面验收不能替代原生 macOS 验收，CI 也不等于真实模型或宿主面板验收。
 
-[反馈问题](https://github.com/Zeen-F/PDF_Vibecoding/issues) · [贡献约定](CONTRIBUTING.md) · [仓库安排](docs/repository-layout.md)
+[反馈问题](https://github.com/Zeen-F/XiReader/issues) · [贡献约定](CONTRIBUTING.md) · [仓库安排](docs/repository-layout.md)
 
 作者联系方式：**微信 a1152017529 · QQ 1152017529**。
 
