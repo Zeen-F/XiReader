@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rename, rm, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../server/app.mjs';
 import { CURRENT_SCHEMA } from '../shared/library.mjs';
-import { extractToc } from '../server/toc.mjs';
+import { extractToc, readTocCalibration } from '../server/toc.mjs';
 import { bookmarkedPdf, unverifiedContentsPdf, verifiedContentsPdf } from './fixtures/toc-browser.mjs';
 
 function literal(text) { return `(${text.replace(/[\\()]/g, '\\$&')})`; }
@@ -210,6 +211,33 @@ test('ordinary numbered prose and scanned pages produce no directory; search sto
     ['Measurements', 'Voltage is 12', 'Time is 24'],
   ] }));
   assert.equal(bodyAfterContents.entries.length, 2, 'Plain numeric prose must not extend the preceding contents page');
+});
+
+test('per-entry calibration follows the exact edition and directory, including Roman pages', async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'paperdesk-toc-calibration-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const pdf = { sha256: 'a'.repeat(64), page_count: 80 };
+  const toc = { source: 'contents', entries: [
+    { id: 'c-1', title: 'Preface', printedPage: 'iv', page: null, children: [] },
+    { id: 'c-2', title: '1 Devices', printedPage: '1', page: null, children: [
+      { id: 'c-3', title: '1.1 Junctions', printedPage: '7', page: null, children: [] },
+    ] },
+  ] };
+  const dir = join(dataDir, 'toc-calibrations');
+  await mkdir(dir);
+  const tocDigest = createHash('sha256').update(JSON.stringify(flatten(toc.entries).map(e => [e.id, e.title, e.printedPage]))).digest('hex');
+  const file = join(dir, pdf.sha256 + '.json');
+  const record = { version: 1, tocDigest, pages: [4, 8, 12] };
+  await writeFile(file, JSON.stringify(record));
+  const calibrated = await readTocCalibration(structuredClone(toc), dataDir, pdf);
+  assert.equal(calibrated.calibrated, true);
+  assert.deepEqual(flatten(calibrated.entries).map(e => e.page), record.pages);
+  assert.equal(await readTocCalibration(toc, dataDir, { ...pdf, sha256: 'b'.repeat(64) }), toc);
+  for (const mismatch of [{ pages: [4, 8] }, { pages: [4, 8, 81] }, { tocDigest: 'changed' }]) {
+    await writeFile(file, JSON.stringify({ ...record, ...mismatch }));
+    assert.equal(await readTocCalibration(toc, dataDir, pdf), toc);
+    assert.ok(flatten(toc.entries).every(e => e.page === null));
+  }
 });
 
 test('TOC endpoint works for previously imported documents across restart without changing original files or schema', async (t) => {

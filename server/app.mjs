@@ -7,7 +7,7 @@ import { chmod, copyFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { extractToc } from './toc.mjs';
+import { extractToc, readTocCalibration } from './toc.mjs';
 import { mergeNotes, MAX_NOTE_LENGTH } from '../shared/notes.mjs';
 import { notesRevision, revisionValue, registerPluginApi } from './plugin-api.mjs';
 import { createReaderRenderer, readerPageQuery, readerPageText, ReaderRenderError } from './reader-render.mjs';
@@ -377,7 +377,8 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
     const pending = (async () => {
       const source = vaultStore ? vaultStore.readPdfSnapshot(doc.id, doc.sha256) : pathToFileURL(documentPdfPath(doc));
       try {
-        return await extractToc(source, { getPageTexts: () => db.prepare('SELECT page, text FROM pages WHERE document_id = ? ORDER BY page').all(doc.id) });
+        const toc = await extractToc(source, { getPageTexts: () => db.prepare('SELECT page, text FROM pages WHERE document_id = ? ORDER BY page').all(doc.id) });
+        return await readTocCalibration(toc, dataDir, doc);
       } catch {
         throw new HttpError(422, '暂时无法读取这份 PDF 的目录，请检查原始文件后重试。');
       }
