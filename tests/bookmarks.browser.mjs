@@ -47,6 +47,9 @@ async function runBookmarkMode({context,root,onPreview,mode}) {
   const remove=at=>bookRow(at).getByRole('button',{name:new RegExp(`^删除书签：.*，PDF 第 ${at} 页$`)});
   const editor=at=>page.getByRole('textbox',{name:`书签名称，PDF 第 ${at} 页`,exact:true});
   const documentButton=id=>page.locator(`[data-document-id="${id}"] .document-item`);
+  const openFixtureFolder = async () => {
+    if (mode === 'vault') await page.getByRole('button', { name: 'Obsidian 文件夹：研究', exact: true }).click();
+  };
   const currentPage=()=>page.getByRole('spinbutton',{name:'页码',exact:true});
   const capture=async label=>{if(!onPreview)return;const at=await currentPage().inputValue();await expect(page.locator('.reader-status')).toHaveCount(0);await expect(page.getByLabel(`PDF 第 ${at} 页`,{exact:true})).not.toHaveClass(/is-loading/);await onPreview(page,label);};
   const openBooks=async()=>{if(!await books().isVisible()){const loaded=page.waitForResponse(response=>response.url().startsWith(`${base}/api/documents/`)&&response.url().endsWith('/bookmarks')&&response.request().method()==='GET');loaded.catch(()=>{});await page.getByRole('button',{name:'展开书签',exact:true}).click();await loaded;}await expect(books()).toBeVisible();await expect(page.getByRole('button',{name:'刷新书签',exact:true})).toBeEnabled();};
@@ -54,7 +57,8 @@ async function runBookmarkMode({context,root,onPreview,mode}) {
   const waitGate=async(promise,label)=>{let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`Fixture gate not entered: ${label}`)),15000);})]);}finally{clearTimeout(timer);}};
   let releaseWrite,releaseRead;
   try{
-    await page.goto(base);await page.waitForLoadState('networkidle');await documentButton(first.id).click();
+    await page.goto(base);await page.waitForLoadState('networkidle');
+    await openFixtureFolder();await documentButton(first.id).click();
     await expect(page.getByRole('textbox',{name:'笔记',exact:true})).toHaveValue('删除个人书签后，阅读笔记仍须保留。');
     const contents=page.getByRole('complementary',{name:'目录面板',exact:true});
     for(const id of [first.id,second.id,first.id]){
@@ -128,12 +132,12 @@ async function runBookmarkMode({context,root,onPreview,mode}) {
     await page.getByRole('button',{name:'刷新书签',exact:true}).click();await waitGate(switchCaptured,'switch bookmark GET');await documentButton(second.id).click();
     await expect(documentButton(second.id)).toHaveClass(/active/);releaseRead();releaseRead=null;await expect(page.locator('.bookmark-row')).toHaveCount(0);await page.unroute(`${base}/api/documents/${first.id}/bookmarks`);
     await expect(currentPage()).toHaveValue('1');await openBooks();await page.getByRole('button',{name:'添加当前页书签',exact:true}).click();await expect(jump(1)).toHaveAccessibleName('书签：第 1 页，PDF 第 1 页');
-    await page.reload();await expect(documentButton(second.id)).toHaveClass(/active/);await openBooks();await expect(jump(1)).toBeVisible();await expect(bookRow(2)).toHaveCount(0);
+    await page.reload();await openFixtureFolder();await expect(documentButton(second.id)).toHaveClass(/active/);await openBooks();await expect(jump(1)).toBeVisible();await expect(bookRow(2)).toHaveCount(0);
     await documentButton(first.id).click();await openBooks();await expect(jump(2)).toBeVisible();await expect(jump(3)).toBeVisible();await expect(bookRow(1)).toHaveCount(0);await remove(2).click();await expect(bookRow(2)).toHaveCount(0);
     const preserved=(await request(`/documents/${first.id}`)).data;assert.equal(preserved.document.notesZh,'删除个人书签后，阅读笔记仍须保留。');assert.ok(preserved.annotations.some(item=>item.id===annotation.id));
     const pdfResponse=await fetch(`${base}/api/documents/${first.id}/file`);assert.equal(createHash('sha256').update(Buffer.from(await pdfResponse.arrayBuffer())).digest('hex'),createHash('sha256').update(firstBytes).digest('hex'));
     if(mode==='vault'){const markdown=await readFile(path.join(vaultDir,'Paperdesk','Notes',`${first.id}.md`),'utf8');assert.ok(markdown.includes('删除个人书签后，阅读笔记仍须保留。'));assert.ok(markdown.includes('删除书签后仍保留的批注'));}
-    await stop();runtime=createApp(mode==='vault'?{vaultDir,dataDir:path.join(fixture,'rebuilt-cache')}:{dataDir});await start();await page.goto(base);await documentButton(first.id).click();await openBooks();await expect(jump(3)).toBeVisible();await expect(bookRow(2)).toHaveCount(0);
+    await stop();runtime=createApp(mode==='vault'?{vaultDir,dataDir:path.join(fixture,'rebuilt-cache')}:{dataDir});await start();await page.goto(base);await openFixtureFolder();await documentButton(first.id).click();await openBooks();await expect(jump(3)).toBeVisible();await expect(bookRow(2)).toHaveCount(0);
     await jump(3).click();await expect(currentPage()).toHaveValue('3');assert.deepEqual(errors,[]);
     console.log(`PASS: ${mode} personal bookmarks add/dedup/rename/jump/layout/narrow, unique directory lifecycle/hidden drafts/CAS, stale reads, lost response readback, document isolation, preserved PDF/notes/annotations and restart${mode==='vault'?' from Markdown':''}`);
   }catch(error){await onPreview?.(page,`${mode}-bookmarks-failure`);throw error;}finally{releaseRead?.();releaseWrite?.();await page.close();await stop();await rm(fixture,{recursive:true,force:true});}
