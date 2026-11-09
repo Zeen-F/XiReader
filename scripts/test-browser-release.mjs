@@ -425,6 +425,11 @@ async function main() {
     const vaultBrowser = await contextFor(vault.base); page = await vaultBrowser.context.newPage(); await page.goto(vault.base);
     const sidebarSource = page.getByRole('navigation', { name: '文献库', exact: true })
       .getByRole('button', { name: `打开 Obsidian PDF：${sourceRelative}`, exact: true });
+    const expandSourceFolders = async () => {
+      await page.getByRole('button', { name: 'Obsidian 文件夹：已有资料', exact: true }).click();
+      await page.getByRole('button', { name: 'Obsidian 文件夹：已有资料/模拟电路', exact: true }).click();
+    };
+    await expandSourceFolders();
     await expect(sidebarSource).toBeVisible(); assert.deepEqual((await request(vault.base, '/documents')).documents, []);
     const opened = page.waitForResponse(response => response.url() === `${vault.base}/api/vault/pdfs/open` && response.request().method() === 'POST');
     await sidebarSource.click(); const openedResponse = await opened; assert.equal(openedResponse.status(), 201);
@@ -472,7 +477,7 @@ async function main() {
     assert.equal(sourceRestart.document.notesZh, sourceNotes); assert.deepEqual(sourceRestart.annotations, [sourceAnnotation]);
     assert.deepEqual((await request(vault.base, `/documents/${source.id}/bookmarks`)).bookmarks, [bookmark]);
     assert.equal((await request(vault.base, `/documents/${copied.id}`)).document.notesZh, copiedNotes);
-    page = await vaultBrowser.context.newPage(); await page.goto(vault.base); await documentButton(page, source.id).click();
+    page = await vaultBrowser.context.newPage(); await page.goto(vault.base); await expandSourceFolders(); await documentButton(page, source.id).click();
     await expect(page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue(sourceNotes);
     await goto(page, 1); await openBookmarks(page);
     await page.getByRole('button', { name: '书签：回看工作条件，PDF 第 2 页', exact: true }).click();
