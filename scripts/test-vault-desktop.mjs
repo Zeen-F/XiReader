@@ -89,9 +89,13 @@ async function importPdf(file = sample, expectedStatus = 201) {
 }
 async function selectVaultPdf() {
   const sourceChoice = page.getByRole('button', { name: `打开 Obsidian PDF：${sourceRelative}`, exact: true });
+  const folder = page.getByRole('button', { name: 'Obsidian 文件夹：原有资料', exact: true });
+  await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  await expect(sourceChoice).toHaveCount(0);
+  await folder.click();
   await expect(sourceChoice).toBeVisible();
   await expect(sourceChoice).toContainText(path.posix.basename(sourceRelative));
-  await expect(sourceChoice).toContainText(path.posix.dirname(sourceRelative));
+  await expect(folder.locator('small')).toHaveText('1');
   assert.equal((await request('/documents')).documents.length, 0, 'Listing existing PDFs must not associate them');
   assert.deepEqual(await managedPdfCopies(), []);
   await page.screenshot({ path: path.join(artifacts, `${label}-sidebar.png`) });
