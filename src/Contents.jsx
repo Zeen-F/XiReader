@@ -91,7 +91,7 @@ export default function Contents({ document, page, onJump, onClose, embedded = f
         <div className="contents-meta"><span>{data.source === 'bookmarks' ? 'PDF 内置书签' : '目录页识别'} · {all.length} 条</span><small>右侧数字为 PDF 页码</small></div>
         <label className="contents-search"><Search size={13}/><input aria-label="筛选章节" placeholder="查找章节" value={query} onChange={event => setQuery(event.target.value)} maxLength={200}/>{query && <button aria-label="清空章节筛选" onClick={() => setQuery('')}><X size={13}/></button>}</label>
         {data.source === 'contents' && <details className="contents-offset" open={manualOffset === null && !data.offsetVerified ? true : undefined}>
-          <summary>页码校正{manualOffset !== null ? ` · 手动 ${manualOffset >= 0 ? '+' : ''}${manualOffset}` : data.offsetVerified ? ' · 已自动确认' : ' · 需要确认'}</summary>
+          <summary>页码校正{manualOffset !== null ? ` · 手动 ${manualOffset >= 0 ? '+' : ''}${manualOffset}` : data.calibrated ? ' · 已逐项校正' : data.offsetVerified ? ' · 已自动确认' : ' · 需要确认'}</summary>
           <p>PDF 页码 = 书中页码 + 偏移。例如书中第 1 页在 PDF 第 21 页，填 20。</p>
           <div><input aria-label="目录页码偏移" type="number" min={-document.pageCount} max={document.pageCount} step="1" value={offsetInput} onChange={event => setOffsetInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') applyOffset(); }}/><button className="mini-primary" disabled={!validOffset} onClick={applyOffset}>应用偏移</button></div>
           {manualOffset !== null && <button className="text-button" onClick={resetOffset}>恢复自动</button>}

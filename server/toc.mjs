@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { pdfAssetPaths } from '../shared/pdf-assets.mjs';
 
@@ -219,6 +222,28 @@ function mapPages(rows, labels, pageCount, pages, contentsPages) {
     }
   }
   return { pageOffset, offsetVerified: pageOffset !== null };
+}
+
+// A reflowed edition can have a different physical page for every entry.
+export async function readTocCalibration(toc, dataDir, document) {
+  if (toc.source !== 'contents' || !/^[0-9a-f]{64}$/.test(document.sha256)) return toc;
+  const file = path.join(dataDir, 'toc-calibrations', document.sha256 + '.json');
+  let calibration;
+  try {
+    calibration = JSON.parse(await readFile(file, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return toc;
+    throw error;
+  }
+  const flatten = entries => entries.flatMap(entry => [entry, ...flatten(entry.children)]);
+  const entries = flatten(toc.entries);
+  const signature = JSON.stringify(entries.map(entry => [entry.id, entry.title, entry.printedPage]));
+  const digest = createHash('sha256').update(signature).digest('hex');
+  if (calibration?.version !== 1 || calibration.tocDigest !== digest
+      || !Array.isArray(calibration.pages) || calibration.pages.length !== entries.length
+      || !calibration.pages.every(page => validPage(page, document.page_count) !== null)) return toc;
+  entries.forEach((entry, index) => { entry.page = calibration.pages[index]; });
+  return { ...toc, pageOffset: null, offsetVerified: true, calibrated: true };
 }
 
 /** Read only the supplied original PDF; metadata is computed in memory, never written. */
