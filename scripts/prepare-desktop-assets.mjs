@@ -17,7 +17,8 @@ const assets = path.join(root, '.local/desktop-assets');
 await mkdir(assets, { recursive: true });
 
 const canvas = createCanvas(1024, 1024);
-const source = await readFile(path.join(root, 'desktop/icon.svg'));
+const iconSource = process.platform === 'darwin' ? 'packaging/macos-icon.png' : 'desktop/icon.svg';
+const source = await readFile(path.join(root, iconSource));
 canvas.getContext('2d').drawImage(await loadImage(source), 0, 0, 1024, 1024);
 const png = path.join(assets, 'icon.png');
 await writeFile(png, canvas.toBuffer('image/png'));

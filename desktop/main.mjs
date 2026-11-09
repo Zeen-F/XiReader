@@ -17,7 +17,8 @@ const previewProfile = desktopPreview && process.argv.find(arg => arg.startsWith
 const userData = path.resolve(previewProfile || process.env.PAPERDESK_DESKTOP_USER_DATA || path.join(app.getPath('appData'), desktopPreview ? 'Paperdesk-Shanlan-V2' : 'Paperdesk'));
 const shanlanAppearance = dailyShanlan || desktopPreview || readAppearance(userData);
 const readerUrl = baseUrl => shanlanAppearance ? `${baseUrl}/?visual=shanlan` : baseUrl;
-app.setName(desktopPreview ? 'Paperdesk Shanlan V2' : 'Paperdesk');
+const appName = isMac ? 'XiReader' : 'Paperdesk';
+app.setName(desktopPreview ? `${appName} Shanlan V2` : appName);
 app.setPath('userData', userData);
 if (process.platform === 'win32') app.setAppUserModelId(desktopPreview ? 'com.paperdesk.shanlan.preview' : 'com.paperdesk.desktop');
 let runtime, window, ready = false, quitting = false, quitPending = false, switching = false, flushing;

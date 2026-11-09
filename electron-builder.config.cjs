@@ -35,13 +35,15 @@ module.exports = {
   ],
   artifactName: 'Paperdesk-${version}-mac-${arch}.${ext}',
   mac: {
+    executableName: 'XiReader',
     target: [{ target: 'dmg', arch: ['arm64'] }, { target: 'zip', arch: ['arm64'] }],
     category: 'public.app-category.productivity',
     icon: '.local/desktop-assets/icon.icns',
     identity: null,
     hardenedRuntime: false,
     notarize: false,
-    extendInfo: { CFBundleDisplayName: 'XiReader' },
+    // Keep the existing plug-in executable path and Electron's default helper lookup name.
+    extendInfo: { CFBundleDisplayName: 'XiReader', CFBundleExecutable: 'Paperdesk' },
   },
   win: {
     target: [{ target: 'portable', arch: ['x64'] }],

@@ -41,7 +41,7 @@ Mac 和 Windows 启动器会在缺少依赖或构建产物时准备运行；已�
 
 1.2.0-beta.1 包含 Obsidian 仓库与个人页面书签。API 回归覆盖旧库在 DDL 前的一致性备份、schema 5 迁移、书签 CRUD／版本冲突、原位 PDF／外部导入、正式 v1／v2／v3 Markdown 兼容及索引重建；浏览器回归覆盖两种存储模式的添加、命名、跳转、草稿保护及迟到响应。`node scripts/test-vault-desktop.mjs` 另外检查真实 Electron 的仓库、外部导入、书签保存、正常退出和重开跳转；打包后追加 `--packaged <应用路径>`。所有资料均使用隔离临时库，默认结束后清理；仅需留证时通过 `PAPERDESK_ACCEPTANCE_DIR` 指定忽略的 `.local/` 内专用目录。以上是检查范围，[本版变更记录](history/1.2.0-beta.1.md) 保留原发布验收结果，当前 Windows 检查另记在本机摘要中。
 
-macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run desktop:dist` 生成，`npm run test:desktop` 检查独立窗口；打包后运行 `npm run test:desktop -- --packaged release/mac-arm64/Paperdesk.app` 再验收。所有桌面测试使用临时用户设置和文献库。构建与发布顺序见 [桌面预览版](desktop-release.md)。
+macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run desktop:dist` 生成，`npm run test:desktop` 检查独立窗口；打包后运行 `npm run test:desktop -- --packaged release/mac-arm64/XiReader.app` 再验收。所有桌面测试使用临时用户设置和文献库。构建与发布顺序见 [桌面预览版](desktop-release.md)。
 
 四项可靠性修复另用 `npm run test:desktop:reliability` 验证真实 Electron 的评论草稿、响应丢失重试、阅读位置保存及关闭／退出保护。测试库、配置和截图默认置于临时目录并在结束时清理；仅需留证时指定 `PAPERDESK_ACCEPTANCE_DIR` 到 `.local/` 内专用目录，保留必要截图和摘要，合成库仍清理。安装包使用同一命令追加 `-- --packaged <应用路径>`，Windows 可指定 `release/win-unpacked/Paperdesk.exe`。这项测试会在隔离库注入保存故障和受控异常退出；异常退出前已刷新浏览器存储，不能据此声称断电恢复。主动测试刷新只批准当次页面卸载，原生关闭和退出仍使用产品实际保存确认流程。
 

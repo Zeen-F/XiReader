@@ -1,6 +1,6 @@
 # XiReader 桌面预览版
 
-当前源码显示名称为 XiReader；本文所链接的历史发布包仍显示纸间 Paperdesk，兼容的应用文件名和数据目录保持原名。
+当前源码在 macOS 上构建为 XiReader.app。本文链接的历史发布包使用 Paperdesk.app。两个版本读取同一资料目录。
 
 **1.2.0-beta.2** 桌面预览包面向 **Apple Silicon Mac（M 系列芯片）和 Windows x64**。Windows 使用解压即用 ZIP，使用及开发方法见 [Windows 指南](windows.md)。安装包带有运行环境，使用者无需安装 Node.js、开发工具或启动终端。
 
@@ -100,15 +100,15 @@ npm run test:desktop
 PAPERDESK_ACCEPTANCE_DIR=.local/beta1-verification/source-release npm run test:desktop:reliability
 node scripts/test-vault-desktop.mjs
 npm run desktop:dist
-npm run test:desktop -- --packaged release/mac-arm64/Paperdesk.app
-PAPERDESK_ACCEPTANCE_DIR=.local/beta1-verification/packaged-release npm run test:desktop:reliability -- --packaged release/mac-arm64/Paperdesk.app
-node scripts/test-vault-desktop.mjs --packaged release/mac-arm64/Paperdesk.app
+npm run test:desktop -- --packaged release/mac-arm64/XiReader.app
+PAPERDESK_ACCEPTANCE_DIR=.local/beta1-verification/packaged-release npm run test:desktop:reliability -- --packaged release/mac-arm64/XiReader.app
+node scripts/test-vault-desktop.mjs --packaged release/mac-arm64/XiReader.app
 npm run browser:dist
 node scripts/test-browser-release.mjs --archive release/Paperdesk-1.2.0-beta.2-browser.zip
 npm run release:checksums
 ```
 
-`npm run desktop` 用于从源码启动桌面窗口；`npm run desktop:pack` 只生成可用于检查的 `.app`；`npm run desktop:dist` 在 `release/` 生成 `.app`、DMG 和 ZIP。原创图标源为 `desktop/icon.svg`，生成的 PNG、ICNS 位于忽略的 `.local/desktop-assets/`。生产依赖随应用打包，开发依赖不进入安装包。
+`npm run desktop` 用于从源码启动桌面窗口；`npm run desktop:pack` 只生成可用于检查的 `.app`；`npm run desktop:dist` 在 `release/` 生成 `.app`、DMG 和 ZIP。macOS 图标源为 `packaging/macos-icon.png`，Windows 图标源为 `desktop/icon.svg`，生成的 PNG、ICNS 位于忽略的 `.local/desktop-assets/`。生产依赖随应用打包，开发依赖不进入安装包。
 
 发布前须用隔离文献库检查安装包启动、PDF 导入及渲染、笔记和批注保存、退出与重开，并对源码和打包应用运行四项可靠性回归、Obsidian 原位／外部导入及书签流程。DMG 还需挂载、复制应用到隔离安装目录后实际启动检查，浏览器 ZIP 需在独立解压目录安装依赖、停止和重启读回；同时确认包内不存在私人资料。不要使用正式文献库做自动回归。测试库和配置默认放临时目录并清理，需要留证时才指定 `.local/` 内专用证据目录，保留一份当前摘要和必要截图，不累计多轮合成库和安装副本。安装包检查通过后，macOS 的 `release:checksums` 为当前 DMG／ZIP 写入 `SHA256SUMS`；Windows 为当前 portable EXE 写入 `SHA256SUMS-win`。两者均不收录应用目录或更新元数据。
 

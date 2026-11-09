@@ -85,8 +85,8 @@ jobs:
           mkdir "$mount" "$installed"
           hdiutil attach "release/Paperdesk-${RELEASE_VERSION}-mac-arm64.dmg" -readonly -nobrowse -mountpoint "$mount"
           trap 'hdiutil detach "$mount"' EXIT
-          ditto "$mount/Paperdesk.app" "$installed/Paperdesk.app"
-          echo "PAPERDESK_RELEASE_APP=$installed/Paperdesk.app" >> "$GITHUB_ENV"
+          ditto "$mount/XiReader.app" "$installed/XiReader.app"
+          echo "PAPERDESK_RELEASE_APP=$installed/XiReader.app" >> "$GITHUB_ENV"
       - name: Extract the Windows ZIP into an isolated directory
         if: runner.os == 'Windows'
         shell: pwsh

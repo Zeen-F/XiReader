@@ -4,7 +4,7 @@
 
 我是软件开发小白，这个软件是通过和 AI 对话、反复试用和修改，**vibecoding（vibe coding）** 出来的。最初只是想给自己做一个方便读 PDF、划重点和记笔记的工具，于是有了最初的「纸间」，现更名为 XiReader。目前仍是预览版，欢迎反馈问题、提建议或提交改进。
 
-XiReader 是纸间 Paperdesk 的新显示名称，仓库已从 `Zeen-F/PDF_Vibecoding` 更名为 [Zeen-F/XiReader](https://github.com/Zeen-F/XiReader)。已有本地工作区无需改名；`Paperdesk.app` / `Paperdesk.exe`、安装包文件名、`paperdesk` API/MCP 标识、`PAPERDESK_*` 配置和现有资料目录继续沿用，避免影响已有文献库和插件绑定。
+XiReader 是纸间 Paperdesk 的新显示名称，仓库已从 `Zeen-F/PDF_Vibecoding` 更名为 [Zeen-F/XiReader](https://github.com/Zeen-F/XiReader)。从当前源码构建的 Mac 应用名为 `XiReader.app`，下方链接的历史发布包使用 `Paperdesk.app`。Windows 的 `Paperdesk.exe`、安装包文件名、`paperdesk` API/MCP 标识、`PAPERDESK_*` 配置和现有资料目录继续沿用，避免影响已有文献库和插件绑定。
 
 ## 版本与获取方式
 
