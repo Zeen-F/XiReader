@@ -12,7 +12,8 @@
 
 | 版本／分支 | 包含什么 | 如何获取 |
 | --- | --- | --- |
-| 已发布 `v1.2.0-beta.6`；`main` 的功能基线为该版本（`ed204b3`） | PDF 阅读、批注、笔记、Obsidian 库、翻译 API、Codex MCP 插件、知识工作台交换和山岚 V2；beta.6 修复普通桌面入口读取已保存的山岚外观 | 下方 Release 安装包；应用仍显示 Paperdesk |
+| 已发布 `v1.2.0-beta.6`（`ed204b3`） | PDF 阅读、批注、笔记、Obsidian 库、翻译 API、Codex MCP 插件、知识工作台交换和山岚 V2；beta.6 修复普通桌面入口读取已保存的山岚外观 | 下方 Release 安装包；应用仍显示 Paperdesk |
+| `main` 源码 | 在 beta.6 基础上增加 Obsidian 文件夹层级浏览和目录条目页码校正 | 按下方源码步骤从 `main` 构建 |
 | 开发分支 `codex/xireader-codex-sidebar`，本文核对至 `b7b3f0a` | XiReader 显示名称、可调阅读侧栏、统一 Codex 阅读会话、按需补读和回答追加 | [开发分支源码](https://github.com/Zeen-F/XiReader/tree/codex/xireader-codex-sidebar)，按下方源码步骤切换分支并重新构建；尚未合入 `main` 或公开发布 |
 
 下载 beta.6 不会获得下述新 Codex 侧栏。源码更新也不会自动替换已安装的应用；已发布功能以 [beta.6 发布页](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.6) 为准。
@@ -55,7 +56,7 @@
 
 ## 阅读与记录
 
-| 功能 | 已发布 beta.6 与 main 的行为 |
+| 功能 | `main` 源码的行为 |
 | --- | --- |
 | PDF 与文献库 | 导入或拖入 PDF，按内容去重；Obsidian 中已有 PDF 原位阅读，保留源文件位置与内容。 |
 | 整理和搜索 | Obsidian 模式按知识库的文件夹层级浏览 PDF，文件夹右侧显示所含 PDF 总数。也可用书架手动分组，或跨目录搜索文献、笔记和批注。 |
