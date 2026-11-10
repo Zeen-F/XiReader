@@ -8,7 +8,9 @@ import './library.css';
 
 const fmtSize = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 const searchShortcut = /Mac/i.test(globalThis.navigator?.userAgentData?.platform || globalThis.navigator?.platform || '') ? '⌘ K' : 'Ctrl K';
-export default function Library({ documents, currentId, loading, importing, query, onQuery, onClearSearch, onImport, onDemo, onOpen, onRefresh, onFolderChange, searchResults, searchCount, searchDocumentIds = [], storageMode = 'library', onChooseVaultPdf, vaultBusy = false, vaultInventory, onVaultPdfOpen, onVaultRetry }) {
+import VaultPdfIssues from './VaultPdfIssues.jsx';
+
+export default function Library({ documents, currentId, loading, importing, query, onQuery, onClearSearch, onImport, onDemo, onOpen, onRefresh, onFolderChange, searchResults, searchCount, searchDocumentIds = [], storageMode = 'library', onChooseVaultPdf, vaultBusy = false, vaultInventory, onVaultPdfOpen, onVaultRetry, onAcceptReplacement }) {
   const [folders, setFolders] = useState([]), [filter, setFilter] = useState('all');
   const [expandedPaths, setExpandedPaths] = useState(() => new Set());
   const [shelfOpen, setShelfOpen] = useState(false), [movingDoc, setMovingDoc] = useState(null);
@@ -128,6 +130,7 @@ export default function Library({ documents, currentId, loading, importing, quer
     </nav>
     {error && <p className="library-error" role="alert">{error}</p>}
     {vault && vaultInventory?.error && <div className="library-error vault-inventory-error" role="alert"><span>Obsidian PDF 列表未更新：{vaultInventory.error}{vaultInventory.loaded ? '。当前保留上次列表。' : '。请重试读取。'}</span><button disabled={vaultInventory.loading || vaultBusy} onClick={onVaultRetry}>重试 PDF 列表</button></div>}
+    {vault && <VaultPdfIssues issues={vaultInventory?.issues} onAccept={onAcceptReplacement} busy={vaultBusy}/>}
     {vault && vaultInventory?.truncated && <p className="vault-inventory-notice">仓库文件较多，当前仅列出部分 PDF。</p>}
     <div className="library-heading"><span>{query.trim() ? '搜索结果 · 全部文献' : grouped ? 'Obsidian 文件夹' : activeFolder?.name || (filter === 'unfiled' ? '未分类' : '我的文献')}</span><span>{query.trim() ? searchCount : visible.length + candidates.length}</span></div>
     <nav className="document-list" aria-label="文献库">{loading ? <p className="library-empty">正在打开书桌…</p> : query.trim() ? <>{searchResults}{candidates.length > 0 && <p className="vault-search-caption">文件名与路径匹配 · 打开后可全文搜索</p>}{[...candidates,...linkedMatches].map(renderCandidate)}</> : <>{grouped ? <VaultFolderTree documents={documents} sourceFiles={sourceFiles} candidates={unlinked} expandedPaths={expandedPaths} setExpandedPaths={setExpandedPaths} renderDocument={renderDocument} renderCandidate={renderCandidate}/> : <>{visible.map(renderDocument)}{candidates.map(renderCandidate)}</>}{vault && vaultInventory?.loading && <p className="vault-inventory-notice" role="status">正在读取 Obsidian PDF 列表…</p>}{!visible.length && !candidates.length && !vaultInventory?.loading && !(vault && vaultInventory?.error) && <p className="library-empty">{documents.length ? '这里还没有文献。' : '书架还是空的。'}<small>{documents.length ? '将文献拖到上方文件夹，或用“移动到”整理。' : vault ? '导入新的 PDF，或将 PDF 放进 Obsidian 后刷新列表。' : '导入第一篇论文，或打开示例开始体验。'}</small></p>}</>}</nav>

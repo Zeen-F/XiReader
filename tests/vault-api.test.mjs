@@ -14,6 +14,8 @@ import { CURRENT_SCHEMA } from '../shared/library.mjs';
 import { legacyVaultMarkdown } from './fixtures/vault-legacy.mjs';
 import { directoryLinkType, fileSymlinkSkipReason } from './fixtures/filesystem-links.mjs';
 
+import { readerLayoutPdf } from './fixtures/reader-layout.mjs';
+
 const sample = await readFile(new URL('../public/examples/reading-demo.pdf',import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -289,6 +291,56 @@ test('a missing or replaced original PDF stops reads and writes without touching
   }
   assert.equal(hash(await readFile(file)),hash(changed),'Refused reads cannot restore or overwrite the original PDF');
   await rm(file);assert.equal((await h.request(`/documents/${doc.id}/toc`)).status,409);assert.equal(await readFile(h.notePath(doc.id),'utf8'),note);
+});
+
+test('a replaced PDF is isolated on restart and only the confirmed same-page version can inherit its records', async t => {
+  const h = await harness(t);
+  const book = await h.upload('books/scan.pdf', readerLayoutPdf({ pageCount: 2, variant: 'oldlayer' }));
+  const healthy = await h.upload('books/other.pdf');
+  const endpoint = `/documents/${book.id}`, source = path.join(h.vaultDir, 'books/scan.pdf');
+  const { libraryId } = await (await h.request('/plugin/status')).json();
+  assert.equal((await h.request(endpoint, 'PATCH', { notesZh: 'keep my note', expectedNotesRevision: book.notesRevision })).status, 200);
+  assert.equal((await h.request(endpoint, 'PATCH', { lastPage: 2, positionWriterId: randomUUID(), positionSequence: 1 })).status, 200);
+  const annotation = { page: 2, kind: 'region', rects: [{ x: .1, y: .2, width: .2, height: .3 }], color: 'green', comment: 'saved evidence' };
+  assert.equal((await h.request(endpoint + '/annotations', 'POST', annotation)).status, 201);
+  assert.equal((await h.request(endpoint + '/bookmarks', 'POST', { page: 2, title: 'bookmark' })).status, 201);
+  const before = await readFile(h.notePath(book.id)), detail = await (await h.request(endpoint)).json();
+  const issues = async () => (await (await h.request('/vault/pdfs')).json()).issues || [];
+  const accept = issue => h.request(`/vault/pdfs/${book.id}/accept-replacement`, 'POST', {
+    expectedLibraryId: libraryId, oldHash: issue.oldHash, newHash: issue.newHash, noteToken: issue.noteToken,
+  });
+  await h.stop();
+  await writeFile(source, readerLayoutPdf({ pageCount: 3, variant: 'longer' }));
+  await h.start();
+  assert.equal((await h.request('/health')).status, 200);
+  assert.equal((await h.request(`/documents/${healthy.id}`, 'PATCH', { notesZh: 'other book', expectedNotesRevision: healthy.notesRevision })).status, 200);
+  assert.equal((await h.request(endpoint + '/file')).status, 409);
+  assert.deepEqual((await (await h.request('/search?q=oldlayer')).json()).results, []);
+  assert.equal((await h.request('/vault/pdfs/open', 'POST', { path: 'books/scan.pdf' })).status, 409);
+  const [longer] = await issues();
+  assert.equal(longer.annotationCount, 1);
+  assert.equal((await accept(longer)).status, 409);
+  await writeFile(source, readerLayoutPdf({ pageCount: 2, variant: 'oldlayer' }));
+  assert.equal((await h.request(endpoint + '/file')).status, 200, 'restoring the original unblocks it without rebinding');
+  assert.deepEqual(await issues(), []);
+  assert.deepEqual(await readFile(h.notePath(book.id)), before);
+  await writeFile(source, readerLayoutPdf({ pageCount: 2, variant: 'newlayer' }));
+  assert.equal((await accept(longer)).status, 409);
+  const [issue] = await issues();
+  assert.equal((await accept({ ...issue, noteToken: '0'.repeat(64) })).status, 409);
+  assert.deepEqual(await readFile(h.notePath(book.id)), before);
+  assert.equal((await accept(issue)).status, 200);
+  assert.equal((await accept(issue)).status, 200, 'retry after a lost response');
+  assert.deepEqual(await issues(), []);
+  await h.stop(); await h.start();
+  const after = await (await h.request(endpoint)).json();
+  assert.equal(after.document.pdfSha256, issue.newHash);
+  assert.equal(after.document.notesZh, 'keep my note');
+  assert.equal(after.document.lastPage, 2);
+  assert.deepEqual(after.annotations, detail.annotations);
+  assert.equal((await (await h.request(endpoint + '/bookmarks')).json()).bookmarks[0].title, 'bookmark');
+  assert.ok((await (await h.request('/search?q=newlayer')).json()).results.some(row => row.documentId === book.id));
+  assert.equal((await h.request(endpoint + `?expectedLibraryId=${libraryId}&expectedPdfSha256=${issue.oldHash}`)).status, 409);
 });
 
 test('legacy version 1 documents continue to open from their historical PDF folder and upgrade formal state on edits',async t=>{

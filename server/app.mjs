@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { extractToc, readTocCalibration } from './toc.mjs';
 import { mergeNotes, MAX_NOTE_LENGTH } from '../shared/notes.mjs';
+import { libraryIdentity } from '../shared/service-identity.mjs';
 import { notesRevision, revisionValue, registerPluginApi } from './plugin-api.mjs';
 import { createReaderRenderer, readerPageQuery, readerPageText, ReaderRenderError } from './reader-render.mjs';
 import { migrateLibrary, registerLibraryApi } from './library.mjs';
@@ -229,6 +230,10 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   const vaultConfig = vaultDir ? getVaultConfig({ vaultDir, vaultSubdir, dataDir: dataDir || process.env.PAPERDESK_DATA_DIR }) : null;
   dataDir = vaultConfig?.dataDir || dataDir || process.env.PAPERDESK_DATA_DIR || path.join(rootDir, 'data');
   dataDir = path.resolve(dataDir);
+  const libraryId = libraryIdentity(vaultConfig?.libraryDir || dataDir);
+  function expectedLibrary(value) {
+    if (value !== libraryId) throw new HttpError(409, '当前文献库已切换，请重新核对文献。');
+  }
   const vaultStore = vaultConfig ? createVaultStore({ vaultDir: vaultConfig.vaultDir, subdir: vaultConfig.vaultSubdir, recoveryDir: path.join(dataDir,'recoveries','originals') }) : null;
   const pdfDir = vaultStore?.pdfDir || path.join(dataDir, 'pdfs');
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -353,6 +358,10 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   }
   const findDocument = db.prepare('SELECT * FROM documents WHERE id = ?');
   const findHash = db.prepare('SELECT * FROM documents WHERE sha256 = ?');
+  function ensureAvailableHash(sha256) {
+    if (vaultIndex?.unavailableDocuments().some(record => record.document.sha256 === sha256))
+      throw new HttpError(409, '此 PDF 已有关联笔记，请将原文件恢复到文献栏提示的位置。');
+  }
   const findAnnotation = db.prepare('SELECT * FROM annotations WHERE id = ? AND document_id = ?');
   const findAnnotations = db.prepare('SELECT * FROM annotations WHERE document_id = ? ORDER BY page, created_at, id');
   const touchDocument = db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?');
@@ -393,6 +402,8 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   }
   function documentOr404(id) {
     if (vaultIndex && !vaultIndex.insideTransaction) vaultIndex.syncKnown();
+    const unavailable = vaultIndex?.unavailableDocument(id);
+    if (unavailable) throw new HttpError(409, `《${unavailable.document.title}》的 PDF 需要核对。请在文献栏查看文件状态。`);
     const row = findDocument.get(id);
     if (!row) throw new HttpError(404, '没有找到这篇文献。');
     return row;
@@ -426,18 +437,52 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/storage', (_req,res) => res.json({ mode: vaultStore ? 'vault' : 'library',
     vaultName: vaultConfig ? path.basename(vaultConfig.vaultDir) : null, subdir: vaultConfig?.vaultSubdir || null,
-    documentCount: db.prepare('SELECT COUNT(*) AS count FROM documents').get().count }));
+    documentCount: db.prepare('SELECT COUNT(*) AS count FROM documents').get().count + (vaultIndex?.unavailableDocuments().length ?? 0) }));
   app.post('/api/storage/refresh', async (_req,res) => { if (vaultIndex) await vaultIndex.refresh(); res.json({ ok: true }); });
   app.get('/api/vault/pdfs', (_req, res) => {
     if (!vaultStore) throw new HttpError(400, '当前使用独立文献库，请先连接 Obsidian 仓库。');
-    res.json(listVaultPdfs({ vaultDir: vaultStore.vaultDir, documents: vaultIndex.pdfReferences() }));
+    const inventory = listVaultPdfs({ vaultDir: vaultStore.vaultDir, documents: vaultIndex.pdfReferences() });
+    const issues = vaultIndex.pdfIssues();
+    res.json(issues.length ? { ...inventory, issues } : inventory);
+  });
+  app.post('/api/vault/pdfs/:id/accept-replacement', async (req, res) => {
+    if (!vaultIndex) throw new HttpError(400, '当前未连接 Obsidian 仓库。');
+    const body = objectBody(req.body, ['expectedLibraryId', 'oldHash', 'newHash', 'noteToken']);
+    for (const value of [body.expectedLibraryId, body.oldHash, body.newHash, body.noteToken]) revisionValue(value, HttpError);
+    expectedLibrary(body.expectedLibraryId);
+    const id = req.params.id;
+    await queueImport(async () => {
+      await vaultIndex.refresh();
+      const record = vaultIndex.unavailableDocument(id);
+      if (!record && findDocument.get(id)?.sha256 === body.newHash) return;
+      const candidate = record?.pdfIssue.candidate;
+      if (!candidate || record.token !== body.noteToken || record.document.sha256 !== body.oldHash || candidate.sha256 !== body.newHash)
+        throw new HttpError(409, 'PDF 或文献笔记已经变化，请刷新后重新核对。');
+      const parsed = await parsePdf(candidate.pdfPath, { expectedSha256: body.newHash, snapshotDir: path.join(dataDir, '.parse-snapshots') });
+      if (parsed.pages.length !== record.document.page_count)
+        throw new HttpError(409, `新文件共 ${parsed.pages.length} 页，原文件共 ${record.document.page_count} 页。请恢复原文件，并将不同页码的版本以另一个文件名打开。`);
+      // Parsing yields. Check all formal records again, including associations
+      // created by another window or sync client before committing the new hash.
+      const records = vaultStore.readAll({ allowUnavailablePdf: true });
+      if (records.some(other => other.document.id !== id && other.document.sha256 === body.newHash))
+        throw new HttpError(409, '新 PDF 已关联另一篇文献，请核对两份来源。');
+      const latest = records.find(other => other.document.id === id);
+      if (latest?.token !== body.noteToken || latest?.pdfIssue?.candidate?.sha256 !== body.newHash)
+        throw new HttpError(409, '核对期间 PDF 或笔记已变化，请刷新后重试。');
+      vaultStore.writeDocument({ ...record, document: { ...record.document, sha256: body.newHash,
+        byte_size: candidate.byteSize, text_available: Number(parsed.textAvailable) } }, body.noteToken);
+      await vaultIndex.refresh({ id, sha256: body.newHash, pdf: parsed });
+    });
+    res.json({ ok: true });
   });
   app.post('/api/vault/pdfs/open', async (req, res) => {
     if (!vaultStore) throw new HttpError(400, '当前使用独立文献库，请先连接 Obsidian 仓库。');
     const body = objectBody(req.body, ['path']);
     const requestedSource = { kind: 'vault', path: body.path };
     const result = await queueImport(async () => {
+      if (vaultIndex.unavailablePath(requestedSource.path)) throw new HttpError(409, '此路径已有文献记录，请先在文献栏核对 PDF 变化。');
       const source = vaultStore.inspectPdfSource(requestedSource);
+      ensureAvailableHash(source.sha256);
       const existing = findHash.get(source.sha256);
       if (existing) return { document: serializeDocument(existing), duplicate: true };
       const parsed = await parsePdf(source.pdfPath, { expectedSha256: source.sha256, snapshotDir: path.join(dataDir, '.parse-snapshots') });
@@ -445,6 +490,8 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
       if (current.sha256 !== source.sha256 || current.byteSize !== source.byteSize) throw new HttpError(409,
         '原 PDF 在打开期间发生修改，请先核对原文件再重新选择；原文件未被移动或改写。');
       await vaultIndex.refresh();
+      if (vaultIndex.unavailablePath(requestedSource.path)) throw new HttpError(409, '此路径已有待核对的文献记录。');
+      ensureAvailableHash(source.sha256);
       const duplicate = findHash.get(source.sha256);
       if (duplicate) return { document: serializeDocument(duplicate), duplicate: true };
       const id = randomUUID(), filename = originalFilename(path.posix.basename(requestedSource.path));
@@ -483,12 +530,14 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
       result = await queueImport(async () => {
         await chmod(temporaryPath, 0o600);
         const sha256 = await hashUpload(temporaryPath);
+        ensureAvailableHash(sha256);
         const duplicate = findHash.get(sha256);
         if (duplicate) return { document: serializeDocument(duplicate), duplicate: true };
         // One parser per app runtime; large concurrent uploads wait on disk.
         const parsed = await parsePdf(temporaryPath);
         if (vaultIndex) {
           await vaultIndex.refresh();
+          ensureAvailableHash(sha256);
           const currentDuplicate = findHash.get(sha256);
           if (currentDuplicate) return { document: serializeDocument(currentDuplicate), duplicate: true };
         }
@@ -548,7 +597,13 @@ export function createApp({ dataDir, vaultDir = process.env.PAPERDESK_VAULT_DIR,
   });
 
   app.get('/api/documents/:id', (req, res) => {
-    res.json({ document: serializeDocument(documentOr404(req.params.id)), annotations: findAnnotations.all(req.params.id).map(serializeAnnotation) });
+    const doc = documentOr404(req.params.id);
+    if (req.query.expectedPdfSha256 !== undefined) {
+      expectedLibrary(req.query.expectedLibraryId);
+      revisionValue(req.query.expectedPdfSha256, HttpError);
+      if (req.query.expectedPdfSha256 !== doc.sha256) throw new HttpError(409, '来源 PDF 的版本已改变，请重新核对原文。');
+    }
+    res.json({ document: serializeDocument(doc), annotations: findAnnotations.all(req.params.id).map(serializeAnnotation) });
   });
   app.get('/api/documents/:id/file', (req, res, next) => {
     const doc = documentOr404(req.params.id);
