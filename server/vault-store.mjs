@@ -363,19 +363,30 @@ export function createVaultStore({ vaultDir, subdir = 'Paperdesk', recoveryDir }
     function verifyPdf(doc, pdfSource) {
       const file = pdfSource ? sourcePath(pdfSource) : pdfPath(doc.id);
       const inspected = inspectPdf(file);
-      if (inspected.byteSize !== doc.byte_size) invalid('PDF 大小与文献记录不一致，请核对或恢复原始 PDF。');
-      if (inspected.sha256 !== doc.sha256) invalid('PDF 校验和与文献记录不一致，请核对或恢复原始 PDF。');
+      if (inspected.sha256 !== doc.sha256 || inspected.byteSize !== doc.byte_size) {
+        const field = inspected.byteSize !== doc.byte_size ? '大小' : '校验和';
+        const error = new VaultError(`PDF ${field}与文献记录不一致，请核对或恢复原始 PDF。`, 'VAULT_PDF_CHANGED');
+        error.candidate = inspected;
+        throw error;
+      }
       return file;
     }
-    function readDocument(id) {
+    function readDocument(id, { allowUnavailablePdf = false } = {}) {
       return guard(() => {
         const file = notePath(id), saved = markdown(file, true);
         if (!saved) return null;
         const { state, notes } = parseDocument(saved.source, id, noteRelativeDir);
-        return { document: { ...state.document, notes_zh: notes, notes_en: '' },
+        const record = { document: { ...state.document, notes_zh: notes, notes_en: '' },
           annotations: state.annotations, annotationRequests: state.annotationRequests, positionWriters: state.positionWriters, bookmarks: state.bookmarks ?? [],
           ...(state.pdfSource ? { pdfSource: state.pdfSource } : {}),
-          token: saved.token, pdfPath: verifyPdf(state.document, state.pdfSource), notePath: file };
+          token: saved.token, notePath: file };
+        try {
+          record.pdfPath = guard(() => verifyPdf(state.document, state.pdfSource));
+        } catch (error) {
+          if (!allowUnavailablePdf) throw error;
+          record.pdfIssue = { message: error.message, candidate: error.candidate };
+        }
+        return record;
       });
     }
     function readPdfSnapshot(id, expectedSha256) {
@@ -597,14 +608,14 @@ export function createVaultStore({ vaultDir, subdir = 'Paperdesk', recoveryDir }
         }
       });
     }
-    function readAll() {
+    function readAll(options) {
       return guard(() => {
         checkedPath(canonical, notesDir, { directory: true });
         const names = readdirSync(notesDir);
         for (const name of names) if (lstatSync(path.join(notesDir, name)).isSymbolicLink()) invalid('Paperdesk 笔记目录含有符号链接，请恢复知识库内的真实文件。');
         const records = names.filter(name => name.endsWith('.md')).sort().map(name => {
           const id = name.slice(0, -3); uuid(id);
-          return readDocument(id);
+          return readDocument(id, options);
         });
         unique(records.map(record => record.document), 'sha256', '文献 PDF');
         unique(records.flatMap(record => record.annotations), 'id', '跨文献批注');

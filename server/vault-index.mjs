@@ -9,6 +9,7 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
   let insideTransaction = false, pendingRefresh;
   const tokens = new Map();
   const pdfSources = new Map();
+  let unavailable = new Map();
   let libraryToken = null;
   // This local marker carries no library contents. It distinguishes an empty
   // established vault with a removed Library.md from a genuinely new vault.
@@ -78,28 +79,49 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
     else pdfSources.delete(doc.id);
   }
   function records() {
-    const all = store.readAll();
+    const all = store.readAll({ allowUnavailablePdf: true });
     const ids = new Set(all.map(record => record.document.id));
     for (const doc of allDocuments()) if (!ids.has(doc.id)) throw new HttpError(409, '仓库中的笔记文件已移动或丢失。请恢复原文件；Paperdesk 保留了最后有效的索引和草稿。');
-    return all;
+    unavailable = new Map(all.filter(record => record.pdfIssue).map(record => [record.document.id, record]));
+    return all.filter(record => !record.pdfIssue);
   }
+
+  // Only remove disposable projections. The Markdown, its annotation geometry
+  // and its expected PDF digest remain authoritative until explicitly rebound.
+  function hideUnavailable() {
+    const remove = db.prepare('DELETE FROM documents WHERE id = ?');
+    for (const id of unavailable.keys()) {
+      remove.run(id);
+      tokens.delete(id);
+      pdfSources.delete(id);
+    }
+  }
+  const sourcePath = record => record.pdfSource?.path
+    || path.relative(store.vaultDir, path.join(store.pdfDir, `${record.document.id}.pdf`)).split(path.sep).join('/');
+
   function syncKnown() {
     if (insideTransaction) return;
     const library = readLibrary();
     const all = records();
     db.exec('BEGIN IMMEDIATE');
     try {
+      hideUnavailable();
       applyLibrary(library.state);
       for (const record of all) {
-        if (!db.prepare('SELECT id FROM documents WHERE id = ?').get(record.document.id)) throw new HttpError(409, '仓库有新文献，请先刷新仓库。');
+        const cached = db.prepare('SELECT sha256 FROM documents WHERE id = ?').get(record.document.id);
+        if (!cached || cached.sha256 !== record.document.sha256) throw new HttpError(409, '文献或 PDF 版本已更新，请先刷新仓库。');
         validateDocumentFolder(record.document);
         if (tokens.get(record.document.id) !== record.token) applyRecord(record);
       }
       db.exec('COMMIT'); libraryToken = library.token; return { all, library };
     } catch (error) { db.exec('ROLLBACK'); tokens.clear(); throw error; }
   }
-  async function refresh() {
-    if (pendingRefresh) return pendingRefresh;
+  async function refresh(prepared) {
+    if (pendingRefresh) {
+      if (!prepared) return pendingRefresh;
+      await pendingRefresh;
+      return refresh(prepared);
+    }
     pendingRefresh = (async () => {
       const library = readLibrary();
       const all = records();
@@ -109,7 +131,8 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
         const cached = db.prepare('SELECT sha256 FROM documents WHERE id = ?').get(doc.id);
         const pages = db.prepare('SELECT COUNT(*) AS count FROM pages WHERE document_id = ?').get(doc.id).count;
         if (!cached || cached.sha256 !== doc.sha256 || pages !== doc.page_count) {
-          const pdf = await parsePdf(record.pdfPath,{ expectedSha256: doc.sha256, snapshotDir: path.join(dataDir,'.indexing') });
+          const pdf = prepared?.id === doc.id && prepared.sha256 === doc.sha256 ? prepared.pdf
+            : await parsePdf(record.pdfPath,{ expectedSha256: doc.sha256, snapshotDir: path.join(dataDir,'.indexing') });
           if (pdf.pages.length !== doc.page_count) throw new HttpError(409, '仓库记录的页数与原始 PDF 不一致，请恢复匹配的文件。');
           parsed.set(doc.id, { pdf, sha256: doc.sha256, pageCount: doc.page_count });
         }
@@ -128,6 +151,7 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
       db.exec('BEGIN IMMEDIATE');
       try {
         const projectedLibrary = readLibrary();
+        hideUnavailable();
         applyLibrary(projectedLibrary.state);
         for (const record of latest) {
           // Library changes can invalidate a document's folder even when its
@@ -162,6 +186,7 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
         || comparable(record) !== comparable(before.get(record.document.id)));
       proposedChanges = changes;
       const nextLibrary = libraryState();
+      for (const { document } of unavailable.values()) validateDocumentFolder(document);
       if (changes.length || JSON.stringify(nextLibrary) !== JSON.stringify(previousLibrary.state)) {
         const recovery = path.join(dataDir, 'recoveries'); mkdirSync(recovery, { recursive: true, mode: 0o700 });
         writeFileSync(path.join(recovery, `${randomUUID()}.json`), JSON.stringify({ before: changes.map(record => before.get(record.document.id)).filter(Boolean), library: previousLibrary, proposed: changes, proposedLibrary: nextLibrary }), { flag: 'wx', mode: 0o600 });
@@ -230,8 +255,21 @@ export function createVaultIndex({ db, store, parsePdf, dataDir, HttpError }) {
       await refresh();
     },
     persistImported, commitImported,
-    pdfReferences() { return allDocuments().map(doc => ({ id: doc.id,
-      path: pdfSources.get(doc.id)?.path || path.relative(store.vaultDir,store.pdfPath(doc.id)).split(path.sep).join('/') })); },
+    unavailableDocument: id => unavailable.get(id),
+    unavailableDocuments: () => [...unavailable.values()],
+    unavailablePath: pdfPath => [...unavailable.values()].find(record => sourcePath(record) === pdfPath),
+    pdfReferences() {
+      const active = allDocuments().map(document => ({ document, pdfSource: pdfSources.get(document.id) }));
+      return [...active, ...unavailable.values()].map(record => ({ id: record.document.id, path: sourcePath(record) }));
+    },
+    pdfIssues() {
+      return [...unavailable.values()].map(record => ({
+        id: record.document.id, title: record.document.title, path: sourcePath(record), message: record.pdfIssue.message,
+        pageCount: record.document.page_count, annotationCount: record.annotations.length, bookmarkCount: record.bookmarks.length,
+        oldBytes: record.document.byte_size, newBytes: record.pdfIssue.candidate?.byteSize,
+        oldHash: record.document.sha256, newHash: record.pdfIssue.candidate?.sha256, noteToken: record.token,
+      }));
+    },
     preserveConflict(id,notes) { return store.writeConflict(id,notes); },
   };
 }

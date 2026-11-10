@@ -99,7 +99,7 @@ export default function Reader({ document, page, onPage, annotations, selection,
       setFallback({ width: base.width, height: base.height }); setLoadedId(document.id); setPdf(value);
     }).catch(err => { if (alive) setError(`无法打开 PDF：${err.message}`); });
     return () => { alive = false; task.destroy().catch(() => {}); };
-  }, [document.id]);
+  }, [document.id, document.pdfSha256]);
 
   const registerTile = useCallback((number, record, previous) => {
     if (record) tiles.current.set(number, record);
@@ -361,7 +361,7 @@ export default function Reader({ document, page, onPage, annotations, selection,
     <div className="reader-body">
       <aside id="reader-navigation-panel" className="contents-panel navigation-panel" aria-label="阅读导航" hidden={!tocOpen} onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();closeToc();}}}>
         <div className="navigation-tabs" role="tablist" aria-label="阅读导航类型"><button role="tab" aria-selected={navigationTab==='contents'} disabled={externalSelectionLocked||bookmarkState.busy} onClick={()=>setNavigationTab('contents')}>目录</button><button role="tab" aria-selected={navigationTab==='bookmarks'} disabled={externalSelectionLocked||bookmarkState.busy} onClick={()=>setNavigationTab('bookmarks')}>书签</button></div>
-        {tocOpen&&navigationTab==='contents'&&<Contents key={`contents:${document.id}`} document={document} page={page} onJump={jumpFromToc} onClose={closeToc} embedded disabled={selectionLocked}/>}
+        {tocOpen&&navigationTab==='contents'&&<Contents key={`contents:${document.id}:${document.pdfSha256}`} document={document} page={page} onJump={jumpFromToc} onClose={closeToc} embedded disabled={selectionLocked}/>}
         <Bookmarks key={`bookmarks:${document.id}`} document={document} page={page} active={tocOpen&&navigationTab==='bookmarks'} disabled={externalSelectionLocked} onJump={jumpFromToc} onClose={closeToc} onStateChange={bookmarkChanged}/>
       </aside>
       <div className="pdf-scroll" ref={scrollRef} onScroll={onScroll} onWheel={()=>{focusAnchor.current=null;}} onTouchStart={()=>{focusAnchor.current=null;}} onPointerDown={event=>{if(event.target===scrollRef.current)focusAnchor.current=null;}} onKeyDown={event=>{if(['PageDown','PageUp','Home','End','ArrowDown','ArrowUp'].includes(event.key))focusAnchor.current=null;}}>

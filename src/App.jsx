@@ -102,7 +102,7 @@ export default function App() {
     try{
       const data=await api('/vault/pdfs',{signal:controller.signal});
       if(!vaultMounted.current||sequence!==vaultInventorySequence.current)return;
-      setVaultInventory({files:data.files,loading:false,loaded:true,error:'',truncated:data.truncated===true});
+      setVaultInventory({files:data.files,issues:data.issues||[],loading:false,loaded:true,error:'',truncated:data.truncated===true});
       return data.files;
     }catch(error){
       if(error.name==='AbortError'||!vaultMounted.current||sequence!==vaultInventorySequence.current)return;
@@ -346,6 +346,29 @@ export default function App() {
       notify(result.duplicate?'已打开关联的 Obsidian PDF。':'已关联并打开 PDF，原文件保留在 Obsidian 原目录。','success');
     }finally{vaultActionRef.current=false;setVaultOpening(false);}
   };
+  const acceptReplacement = async issue => {
+    if (vaultActionRef.current || documentBusy || modal || knowledgeDraft || storageOpen || translationSettingsOpen)
+      throw new Error('请先完成当前操作，再确认 PDF 版本。');
+    assertBookmarksSaved();
+    vaultActionRef.current = true;
+    try {
+      const expectedLibraryId = await ensureLibraryIdentity();
+      await api(`/vault/pdfs/${encodeURIComponent(issue.id)}/accept-replacement`, { method: 'POST',
+        body: JSON.stringify({ expectedLibraryId, oldHash: issue.oldHash, newHash: issue.newHash, noteToken: issue.noteToken }) });
+      if (currentIdRef.current === issue.id) {
+        const data = await api(`/documents/${issue.id}`);
+        if (currentIdRef.current === issue.id) {
+          setCurrent(data.document); setAnnotations(data.annotations);
+          setSelection(null); setSourceFocus(null); setFocused(null);
+        }
+      }
+      await refresh();
+      notify('已使用新版 PDF，原阅读记录已保留。', 'success');
+    } finally {
+      vaultActionRef.current = false;
+      await refreshVaultPdfs().catch(() => {});
+    }
+  };
   const openVaultPdfFromLibrary=async pdfPath=>{try{await chooseVaultPdf(pdfPath);}catch(error){notify(`未打开 PDF，当前文献与草稿已保留：${error.message}`);}};
   const refreshVault=async()=>{
     if(storageBusy)return;setStorageBusy(true);setStorageError('');
@@ -378,7 +401,7 @@ export default function App() {
   return <div className="app-shell" inert={desktopSwitching||vaultPreparing||(vaultMode&&(importing||vaultOpening))||undefined} aria-busy={desktopSwitching||vaultPreparing||vaultOpening} onDragOver={e=>{if(e.dataTransfer.types.includes(DOCUMENT_DRAG_TYPE)){e.preventDefault();return;}if(e.dataTransfer.types.includes('Files')){e.preventDefault();setDragging(true);}}} onDrop={e=>{e.preventDefault();setDragging(false);if(!e.dataTransfer.types.includes(DOCUMENT_DRAG_TYPE)&&e.dataTransfer.files.length)importFiles(e.dataTransfer.files);}}>
     <input ref={input} className="hidden-input" type="file" accept=".pdf,application/pdf" multiple aria-label="选择 PDF 文件" onChange={e=>importFiles(e.target.files)}/>
     <aside id="library-panel" style={shelf.style} className={`sidebar library-sidebar ${visiblePanels.library?'':'collapsed'}`} aria-label="文献栏" inert={modal||!showLibrary||readingFocus||undefined}>
-      <LibraryPanel documents={documents} currentId={current?.id} loading={loading} importing={importing} query={query} onQuery={setQuery} onClearSearch={()=>{setQuery('');setFind('');}} onImport={()=>input.current?.click()} onDemo={demo} storageMode={storage?.mode} onChooseVaultPdf={openVaultPicker} vaultBusy={documentBusy} vaultInventory={vaultInventory} onVaultPdfOpen={openVaultPdfFromLibrary} onVaultRetry={()=>void refreshVaultPdfs().catch(()=>{})} onOpen={openFromLibrary} onRefresh={refreshLibrary} onFolderChange={folderChanged} searchCount={searching?'…':results.length+matchingVaultPdfs.length+matchingLinkedVaultPdfs.length} searchDocumentIds={results.map(result=>result.documentId)} searchResults={<>{searching?<p className="library-empty">正在检索…</p>:results.length?results.map((r,i)=><button className={`search-result ${current?.id===r.documentId?'active':''}`} key={`${r.documentId}-${r.source}-${r.page}-${i}`} disabled={documentBusy} onClick={()=>searchJump(r)}><span className="result-source">{sourceNames[r.source]||'正文'} · 第 {r.page||1} 页</span><b>{r.title}</b><span className="result-snippet"><MarkedText text={r.snippet} query={query.trim()}/></span><ArrowUpRight className="result-arrow" size={14}/></button>):matchingVaultPdfs.length||matchingLinkedVaultPdfs.length?null:<p className="library-empty">没有找到“{query}”<small>试试更短的关键词。扫描件暂不支持全文搜索。</small></p>}{results.length>=100&&<p className="library-empty">仅显示前 100 条，请缩小搜索范围。</p>}</>}/>
+      <LibraryPanel documents={documents} currentId={current?.id} loading={loading} importing={importing} query={query} onQuery={setQuery} onClearSearch={()=>{setQuery('');setFind('');}} onImport={()=>input.current?.click()} onDemo={demo} storageMode={storage?.mode} onChooseVaultPdf={openVaultPicker} vaultBusy={documentBusy} vaultInventory={vaultInventory} onVaultPdfOpen={openVaultPdfFromLibrary} onAcceptReplacement={acceptReplacement} onVaultRetry={()=>void refreshVaultPdfs().catch(()=>{})} onOpen={openFromLibrary} onRefresh={refreshLibrary} onFolderChange={folderChanged} searchCount={searching?'…':results.length+matchingVaultPdfs.length+matchingLinkedVaultPdfs.length} searchDocumentIds={results.map(result=>result.documentId)} searchResults={<>{searching?<p className="library-empty">正在检索…</p>:results.length?results.map((r,i)=><button className={`search-result ${current?.id===r.documentId?'active':''}`} key={`${r.documentId}-${r.source}-${r.page}-${i}`} disabled={documentBusy} onClick={()=>searchJump(r)}><span className="result-source">{sourceNames[r.source]||'正文'} · 第 {r.page||1} 页</span><b>{r.title}</b><span className="result-snippet"><MarkedText text={r.snippet} query={query.trim()}/></span><ArrowUpRight className="result-arrow" size={14}/></button>):matchingVaultPdfs.length||matchingLinkedVaultPdfs.length?null:<p className="library-empty">没有找到“{query}”<small>试试更短的关键词。扫描件暂不支持全文搜索。</small></p>}{results.length>=100&&<p className="library-empty">仅显示前 100 条，请缩小搜索范围。</p>}</>}/>
       {shelf.separator}
     </aside>
     <main className="main-workspace" inert={modal||undefined}>

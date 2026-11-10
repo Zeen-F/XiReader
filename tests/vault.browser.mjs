@@ -317,6 +317,26 @@ export async function vaultWorkflow({context,root,onPreview}) {
     assert.deepEqual(await readdir(path.join(vaultDir,'Paperdesk','PDFs')),[`${imported.id}.pdf`]);
     assert.equal(hash(await readFile(path.join(vaultDir,freshRelative))),hash(freshBytes));
     assert.equal(uploads.length,4);
+    // Replace an associated PDF while the app is closed, then use the
+    // reader's actual review controls without writing to a real vault.
+    const newBytes = Buffer.concat([sourceBytes, Buffer.from('\n% same edition with a new revision\n')]);
+    await page.goto('about:blank');
+    await writeFile(sourcePdf, newBytes);
+    await page.setViewportSize({width:1280,height:840});
+    await page.goto(base);
+    const review = page.getByRole('button', {name:`核对新版 · ${doc.title}`});
+    await expect(review).toBeVisible();
+    await review.click();
+    const replacement = page.getByRole('dialog', {name:'核对 PDF 文件'});
+    await expect(replacement).toContainText(sourceRelative);
+    await replacement.getByRole('button', {name:'关闭',exact:true}).click();
+    await expect(review).toBeVisible();
+    await review.click();
+    await replacement.getByRole('button', {name:'确认同版，使用新 PDF'}).click();
+    await expect(review).toHaveCount(0);
+    const accepted = await (await fetch(`${base}/api/documents/${doc.id}`)).json();
+    assert.equal(accepted.document.pdfSha256, hash(newBytes));
+    assert.equal(accepted.document.notesZh, latestNotes);
     assert.deepEqual(errors,[]);
     console.log('PASS: simultaneous saves preserve both files and draft; usage rules, narrow storage dialog, refresh and reopen');
   } finally {
