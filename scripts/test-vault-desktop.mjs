@@ -87,7 +87,14 @@ async function importPdf(file = sample, expectedStatus = 201) {
   await expect(page.locator('.textLayer span').first()).toBeVisible();
   return document;
 }
+async function expandPanel(id) {
+  const toggle = page.locator(`button[aria-controls="${id}"]`);
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
 async function selectVaultPdf() {
+  await expandPanel('library-panel');
   const sourceChoice = page.getByRole('button', { name: `打开 Obsidian PDF：${sourceRelative}`, exact: true });
   const folder = page.getByRole('button', { name: 'Obsidian 文件夹：原有资料', exact: true });
   await expect(folder).toHaveAttribute('aria-expanded', 'false');
@@ -277,7 +284,14 @@ try {
   assert.equal((await importPdf(externalPdf, 200)).id, imported.id);
   assert.deepEqual(await managedPdfCopies(), [`${imported.id}.pdf`]);
   assert.equal((await request('/documents')).documents.length, 2);
-  await page.locator(`[data-document-id="${document.id}"] .document-item`).click();
+  // Exercise the desktop layout that shows one auxiliary panel at a time.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expandPanel('library-panel');
+  const sourceFolder = page.getByRole('button', { name: 'Obsidian 文件夹：原有资料', exact: true });
+  if (await sourceFolder.getAttribute('aria-expanded') === 'false') await sourceFolder.click();
+  await page.getByRole('group', { name: '原有资料', exact: true })
+    .locator(`[data-document-id="${document.id}"] .document-item`).click();
+  await expandPanel('notes-panel');
   await expect(editor).toHaveValue(notes);
   await record('vault upload saves an external PDF copy inside Obsidian, preserves the external original and deduplicates repeat imports');
 
@@ -346,6 +360,7 @@ try {
   await writeFile(sourcePdf, searchable);
   await launch();
   await expect.poll(async () => (await request('/documents')).documents.length).toBe(1);
+  await expandPanel('library-panel');
   await page.getByRole('button', { name: `核对新版 · ${document.title}`, exact: true }).click();
   const review = page.getByRole('dialog', { name: '核对 PDF 文件' });
   await expect(review).toContainText(sourceRelative);
