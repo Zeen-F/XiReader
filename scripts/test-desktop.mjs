@@ -280,6 +280,9 @@ try {
   await writeFile(path.join(userData, 'appearance.json'), JSON.stringify({ visual: 'shanlan' }));
   page = await launch();
   assert.equal(new URL(page.url()).searchParams.get('visual'), 'shanlan');
+  const restoredEditor = page.getByRole('textbox', { name: '笔记', exact: true });
+  await expect(restoredEditor).toHaveValue(existingNotes);
+  await expect(restoredEditor).toBeEditable();
   assert.equal(JSON.parse(await readFile(path.join(userData, 'desktop-settings.json'), 'utf8')).dataDir, fixtureLibrary);
   assert.equal((await request(`/documents/${existing.id}`)).document.notesZh, existingNotes);
   await quit();

@@ -87,7 +87,14 @@ async function importPdf(file = sample, expectedStatus = 201) {
   await expect(page.locator('.textLayer span').first()).toBeVisible();
   return document;
 }
+async function expandPanel(id) {
+  const toggle = page.locator(`button[aria-controls="${id}"]`);
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
 async function selectVaultPdf() {
+  await expandPanel('library-panel');
   const sourceChoice = page.getByRole('button', { name: `打开 Obsidian PDF：${sourceRelative}`, exact: true });
   const folder = page.getByRole('button', { name: 'Obsidian 文件夹：原有资料', exact: true });
   await expect(folder).toHaveAttribute('aria-expanded', 'false');
@@ -158,14 +165,16 @@ async function bookmarkSecondPage(document) {
   await panel.getByRole('button', { name: '保存书签名称', exact: true }).click();
   const renameResponse = await renamed; assert.equal(renameResponse.status(), 200);
   const saved = (await renameResponse.json()).bookmark;
-  await expect(panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true })).toBeVisible();
-  await number.fill('1'); await number.press('Enter');
+  const savedBookmark = panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true });
+  await expect(savedBookmark).toBeEnabled();
+  const previousPage = page.getByRole('button', { name: '上一页', exact: true });
+  await previousPage.click();
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true }).click();
+  await savedBookmark.click();
   await expect(number).toHaveValue('2');
   await expect(page.getByLabel('PDF 第 2 页', { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(artifacts, `${label}-bookmarks.png`) });
-  await number.fill('1'); await number.press('Enter');
+  await previousPage.click();
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
   const close = page.getByRole('button', { name: '收起书签', exact: true });
   if (await close.isVisible()) await close.click();
@@ -277,7 +286,14 @@ try {
   assert.equal((await importPdf(externalPdf, 200)).id, imported.id);
   assert.deepEqual(await managedPdfCopies(), [`${imported.id}.pdf`]);
   assert.equal((await request('/documents')).documents.length, 2);
-  await page.locator(`[data-document-id="${document.id}"] .document-item`).click();
+  // Exercise the desktop layout that shows one auxiliary panel at a time.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expandPanel('library-panel');
+  const sourceFolder = page.getByRole('button', { name: 'Obsidian 文件夹：原有资料', exact: true });
+  if (await sourceFolder.getAttribute('aria-expanded') === 'false') await sourceFolder.click();
+  await page.getByRole('group', { name: '原有资料', exact: true })
+    .locator(`[data-document-id="${document.id}"] .document-item`).click();
+  await expandPanel('notes-panel');
   await expect(editor).toHaveValue(notes);
   await record('vault upload saves an external PDF copy inside Obsidian, preserves the external original and deduplicates repeat imports');
 
@@ -311,11 +327,13 @@ try {
   await record('storage dialog refreshes the vault and narrow desktop IPC opens only the active document Markdown URI');
 
   const finalNotes = notes + '\n\n退出前新输入的内容。';
+  await expandPanel('notes-panel');
   await editor.fill(finalNotes);
   await quit();
   assert.match(await readFile(notePath, 'utf8'), /退出前新输入的内容/);
   delete env.PAPERDESK_DESKTOP_PORT;
   await launch();
+  await expandPanel('notes-panel');
   await expect(page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue(finalNotes);
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
   await expect(page.locator('.textLayer span').first()).toBeVisible();
@@ -345,7 +363,13 @@ try {
   const searchable = Buffer.concat([original, Buffer.from('\n% same-edition replacement\n')]);
   await writeFile(sourcePdf, searchable);
   await launch();
+  await page.setViewportSize({ width: 1024, height: 768 });
   await expect.poll(async () => (await request('/documents')).documents.length).toBe(1);
+  // The intact PDF opens while the replaced source awaits review. In a narrow
+  // window this selects the initial side panel once the document is rendered.
+  await expect(page).toHaveURL(url => url.searchParams.get('document') === imported.id);
+  await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
+  await expandPanel('library-panel');
   await page.getByRole('button', { name: `核对新版 · ${document.title}`, exact: true }).click();
   const review = page.getByRole('dialog', { name: '核对 PDF 文件' });
   await expect(review).toContainText(sourceRelative);
