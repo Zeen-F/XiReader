@@ -325,11 +325,13 @@ try {
   await record('storage dialog refreshes the vault and narrow desktop IPC opens only the active document Markdown URI');
 
   const finalNotes = notes + '\n\n退出前新输入的内容。';
+  await expandPanel('notes-panel');
   await editor.fill(finalNotes);
   await quit();
   assert.match(await readFile(notePath, 'utf8'), /退出前新输入的内容/);
   delete env.PAPERDESK_DESKTOP_PORT;
   await launch();
+  await expandPanel('notes-panel');
   await expect(page.getByRole('textbox', { name: '笔记', exact: true })).toHaveValue(finalNotes);
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
   await expect(page.locator('.textLayer span').first()).toBeVisible();
