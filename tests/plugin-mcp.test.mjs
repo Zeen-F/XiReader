@@ -261,6 +261,22 @@ test('cached plugin uses real stdio SDK protocol with the isolated local API', a
     assert.equal((await call(client, 'paperdesk_reader_session', { ...args, selection: { kind: 'region', text: '', rects: [] } })).isError, true);
     value(await call(client, 'paperdesk_reader_close', { sessionId: nativeId }));
     assert.equal((await call(client, 'paperdesk_get_context', { sessionId: nativeId })).isError, true);
+    const evidenceSession = randomUUID();
+    const confirmed = await call(client, 'paperdesk_reader_session', { ...args, sessionId: evidenceSession,
+      expectedLibraryId: status.libraryId, expectedPdfSha256: doc.pdfSha256,
+      selection: { kind: 'text', text: 'Explicit verified scope only', rects: [] } });
+    assert.notEqual(confirmed.isError, true);
+    const evidence = confirmed._meta.session.evidence;
+    assert.equal(evidence.libraryId, status.libraryId); assert.equal(evidence.pdfSha256, doc.pdfSha256);
+    assert.equal(evidence.documentId, doc.id); assert.equal(evidence.quote, 'Explicit verified scope only');
+    const exactContext = value(await call(client, 'paperdesk_get_context', { sessionId: evidenceSession }));
+    assert.deepEqual(exactContext.evidence, evidence);
+    assert.equal((await call(client, 'paperdesk_reader_session', { ...args, sessionId: evidenceSession,
+      expectedLibraryId: status.libraryId, expectedPdfSha256: 'f'.repeat(64),
+      selection: { kind: 'text', text: 'Do not replace verified scope', rects: [] } })).isError, true);
+    assert.deepEqual(value(await call(client, 'paperdesk_get_context', { sessionId: evidenceSession })).evidence, evidence);
+    await call(client, 'paperdesk_reader_close', { sessionId: evidenceSession });
+
   });
 });
 

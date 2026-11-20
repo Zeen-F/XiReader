@@ -1,22 +1,24 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
-const PARAMETERS = ['document', 'page', 'pdfSha256', 'capture', 'annotation'];
+const PARAMETERS = ['document', 'page', 'pdfSha256', 'libraryId', 'capture', 'annotation'];
 
 /** Source links carry identities only. Rectangle coordinates come from the local library. */
 export function readSourceLink(search = '') {
   const query = new URLSearchParams(search);
   const documentId = query.get('document'), rawPage = query.get('page');
   const page = rawPage === null ? undefined : /^[1-9]\d*$/.test(rawPage) && Number.isSafeInteger(Number(rawPage)) ? Number(rawPage) : null;
+  const libraryId = query.get('libraryId');
   const pdfSha256 = query.get('pdfSha256'), captureId = query.get('capture'), annotationId = query.get('annotation');
   const invalid = PARAMETERS.some(key => query.getAll(key).length > 1)
     || (documentId !== null && !UUID.test(documentId))
     || (rawPage !== null && (!documentId || page === null))
     || (pdfSha256 !== null && (!documentId || !SHA256.test(pdfSha256)))
+    || (libraryId !== null && (!documentId || !SHA256.test(libraryId)))
     || (captureId !== null && (!UUID.test(captureId) || !documentId || !pdfSha256 || !page))
     || (annotationId !== null && (!UUID.test(annotationId) || !documentId || !page))
     || Boolean(captureId && annotationId);
   return { documentId: documentId?.toLowerCase() || null, page, pdfSha256: pdfSha256?.toLowerCase() || null,
-    captureId: captureId?.toLowerCase() || null, annotationId: annotationId?.toLowerCase() || null, invalid };
+    ...(libraryId !== null ? { libraryId: libraryId.toLowerCase() } : {}), captureId: captureId?.toLowerCase() || null, annotationId: annotationId?.toLowerCase() || null, invalid };
 }
 
 export function sourceLinkSearch(target, search = '') {
@@ -24,6 +26,7 @@ export function sourceLinkSearch(target, search = '') {
   for (const key of PARAMETERS) query.delete(key);
   if (target?.documentId) {
     query.set('document', target.documentId); query.set('page', String(target.page));
+    if (target.libraryId) query.set('libraryId', target.libraryId);
     if (target.pdfSha256) query.set('pdfSha256', target.pdfSha256);
     if (target.captureId) query.set('capture', target.captureId);
     if (target.annotationId) query.set('annotation', target.annotationId);
@@ -40,7 +43,7 @@ export function validSourceRects(rects, maximum = 200) {
   });
 }
 
-const key = target => JSON.stringify([target.documentId, target.page, target.pdfSha256 || null,
+const key = target => JSON.stringify([target.libraryId || null, target.documentId, target.page, target.pdfSha256 || null,
   target.captureId || null, target.annotationId || null, target.find || '']);
 
 /** In-window reading history, independent from browser Back to the referring app. */

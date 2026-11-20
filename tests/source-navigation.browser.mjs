@@ -179,7 +179,11 @@ export async function sourceNavigationWorkflow({context,onPreview}) {
     await page.getByRole('button',{name:'关闭书签',exact:true}).click();await expectPage(5);
     // Invalid/stale source identities never fall back to another page or erase history.
     await jump({...second,page:4});await expect(page.getByRole('alert')).toContainText('不一致');await expectPage(5);await expect(marker(third)).toBeVisible();
-    await jump({...second,pdfSha256:'0'.repeat(64)});await expect(page.getByRole('alert')).toContainText('身份已改变');await expectPage(5);
+    // The server now rejects the stale hash before returning document contents.
+    const rejectedSource=page.waitForResponse(response=>new URL(response.url()).searchParams.get('expectedPdfSha256')==='0'.repeat(64));
+    await jump({...second,pdfSha256:'0'.repeat(64)});
+    assert.equal((await rejectedSource).status(),409);
+    await expect(page.getByRole('alert')).toHaveText('PDF 来源版本已变化，请重新核对原文献。');await expectPage(5);
     assert.equal(new URL(page.url()).searchParams.get('capture'),third.captureId);
     const holdCapture=async()=>{
       let entered;const held=new Promise(resolve=>{entered=resolve;});const blocked=new Promise(resolve=>{release=resolve;});

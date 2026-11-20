@@ -134,7 +134,11 @@ test('disk-backed PDF imports retain full bytes and clean up every outcome', { t
   async function assertCleanStorage(expectedDocuments) {
     const allowed = new Set(expectedDocuments.map(document => `pdfs/${document.id}.pdf`));
     const actual = await filesBelow(dataDir);
-    const payloads = actual.filter(path => !/^paperdesk\.sqlite(?:-(?:wal|shm))?$/.test(path));
+    const databaseFiles = new Set([
+      'paperdesk.sqlite', 'paperdesk.sqlite-wal', 'paperdesk.sqlite-shm',
+      'discussions.sqlite', 'discussions.sqlite-wal', 'discussions.sqlite-shm',
+    ]);
+    const payloads = actual.filter(path => !databaseFiles.has(path));
     assert.deepEqual(payloads, [...allowed].sort(), 'Only committed original PDFs may remain; no upload or parsing fragments');
   }
   async function assertRejected(response) {

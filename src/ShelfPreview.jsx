@@ -93,6 +93,12 @@ function ShelfJump({
     }}
     onClose={() => setOpen(false)}
     onKeyDown={(event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+        return;
+      }
       if (event.key !== "Tab") return;
       const stops = [...event.currentTarget.querySelectorAll('button:not([tabindex="-1"]), input')]
         .filter(element => !element.disabled);

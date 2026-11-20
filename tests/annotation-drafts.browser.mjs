@@ -44,7 +44,7 @@ export async function annotationDraftWorkflow({ page: suppliedPage, context, bas
   const showAnnotations = async target => {
     const expand = target.getByRole('button', { name: '展开笔记面板', exact: true });
     if (await expand.count()) await expand.click();
-    await target.locator('.panel-tabs button').nth(1).click();
+    await target.getByRole('tab', { name: /^批注/ }).click();
   };
   // Creation timestamps may tie and UUID ordering can change card positions.
   // Bind comment aliases to record IDs so every fault targets the intended card.
@@ -106,7 +106,7 @@ export async function annotationDraftWorkflow({ page: suppliedPage, context, bas
     const retained = `切换标签与刷新仍应保留的批注草稿-${key}`;
     cardIds.set(retained, a1.id);
     await draftEditor(page, a1.comment).fill(retained);
-    await page.locator('.panel-tabs button').nth(0).click();
+    await page.getByRole('tab', { name: '笔记', exact: true }).click();
     await showAnnotations(page);
     // This assertion fails on the original v1.1.0-beta.4 implementation.
     await expect(draftEditor(page, a1.comment)).toHaveValue(retained);
@@ -205,7 +205,7 @@ export async function annotationDraftWorkflow({ page: suppliedPage, context, bas
     await secondCard.getByRole('button', { name: '保存', exact: true }).click();
     await remountEntered;
     assert.equal((await json(`/documents/${a.id}`)).annotations.find(item => item.id === a2.id).comment, submitted);
-    await page.locator('.panel-tabs button').nth(0).click();
+    await page.getByRole('tab', { name: '笔记', exact: true }).click();
     await showAnnotations(page);
     await expect(secondCard.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
     await draftEditor(page, a2.comment).fill(baseComment);

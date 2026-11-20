@@ -115,7 +115,7 @@ export default function Library({ documents, currentId, loading, importing, quer
       {shelfPreview && <button className="shelf-move-toggle" aria-label={`整理文献：${doc.title}`} aria-expanded={movingDoc === doc.id} aria-controls={`move-${doc.id}`} title="移动到文件夹" onClick={() => setMovingDoc(value => value === doc.id ? null : doc.id)}><MoreHorizontal size={16}/></button>}
       {(!shelfPreview || movingDoc === doc.id) && <label className="document-move" id={`move-${doc.id}`}><span>移动到</span><select aria-label={`移动文献：${doc.title}`} value={doc.folderId || ''} disabled={!ready || busy} onChange={event => void move(doc.id, event.target.value || null)}><option value="">未分类</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
     </div>;
-  const brand = <a href="#" className="brand" onClick={event => { event.preventDefault(); onQuery(''); setFilter('all'); }}><span className="brand-mark"><BookOpen size={22}/></span><span>纸间<span className="brand-english">PAPERDESK</span></span></a>;
+  const brand = <a href="#" className="brand" onClick={event => { event.preventDefault(); onQuery(''); setFilter('all'); }}><span className="brand-mark"><BookOpen size={22}/></span><span>XiReader<span className="brand-english">READ · THINK · KEEP</span></span></a>;
   return <>
     {shelfPreview ? <div className="shelf-brand-row">{brand}<ShelfJump noun="文献" items={documents.map(doc => ({ id: doc.id, title: doc.title, detail: `${doc.pageCount} 页 · ${fmtSize(doc.byteSize)}` }))} onOpen={onOpen}/></div> : brand}
     <div className="sidebar-caption">给阅读留一张安静的书桌。</div>

@@ -1,7 +1,9 @@
+import LegacyDiscussionHistory from './LegacyDiscussionHistory.jsx';
+import {codexMessageSources} from '../shared/codex-message-source.mjs';
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Pencil, Trash2, ScanLine } from 'lucide-react';
+import { ArrowUpRight, Pencil, Trash2, ScanLine, MessageSquare } from 'lucide-react';
 
-export default function AnnotationCard({ annotation, drafts, onJump, onUpdate, onDelete, onReload }) {
+export default function AnnotationCard({ annotation, drafts, onJump, onUpdate, onDelete, onReload, onDiscuss, libraryId, onOpenCodexSource }) {
   const initial = useRef(drafts.edit(annotation));
   const [editing, setEditing] = useState(Boolean(initial.current));
   const [comment, setComment] = useState(initial.current?.comment ?? annotation.comment);
@@ -54,9 +56,12 @@ export default function AnnotationCard({ annotation, drafts, onJump, onUpdate, o
   };
   return <article data-annotation-id={annotation.id} className={`annotation-card border-${annotation.color}`}>
     <div className="annotation-top"><button className="page-link" onClick={() => onJump(annotation)}>第 {annotation.page} 页 <ArrowUpRight size={12}/></button><div><button className="icon-button small" disabled={busy} aria-label="编辑批注" onClick={() => { setEditing(!editing); setComment(drafts.edit(annotation)?.comment ?? annotation.comment); }}><Pencil size={13}/></button><button className="icon-button small" disabled={busy} aria-label="删除批注" onClick={() => setConfirm(true)}><Trash2 size={13}/></button></div></div>
-    {annotation.kind === 'region' ? <button className="region-card-link" aria-label="框选区域" onClick={() => onJump(annotation)}><ScanLine size={16}/><span>框选区域<small>回到页面查看标记</small></span><ArrowUpRight size={14}/></button> : <blockquote onClick={() => onJump(annotation)}>{annotation.quote}</blockquote>}
+    {annotation.kind === 'region' ? <button className="region-card-link" aria-label="框选区域" onClick={() => onJump(annotation)}><ScanLine size={16}/><span>框选区域<small>回到页面查看标记</small></span><ArrowUpRight size={14}/></button> : <button className="annotation-quote-jump" aria-label={`回到第 ${annotation.page} 页批注原文`} onClick={() => onJump(annotation)}><blockquote>{annotation.quote}</blockquote></button>}
     {editing ? <div className="annotation-edit"><textarea aria-label="编辑批注内容" value={comment} maxLength={20000} onChange={event => change(event.target.value)}/>{draft && <p className="draft-hint">评论草稿保留在当前浏览器，尚未保存到文献库。</p>}{error && <p role="alert" className="inline-error">{error}</p>}<div className="button-row"><button className="text-button" disabled={busy} onClick={() => setEditing(false)}>取消</button>{draft && <button className="text-button" disabled={busy} onClick={discard}>放弃草稿</button>}<button disabled={busy} className="mini-primary" onClick={save}>保存</button></div>{conflicted && <button className="text-button" disabled={busy} onClick={reload}>载入最新评论，保留草稿</button>}</div> : <><p className="annotation-comment">{annotation.comment || (annotation.kind === 'region' ? '仅标记区域，暂无评论' : '仅高亮，暂无评论')}</p>{draft && <button className="text-button" onClick={() => { setComment(draft.comment); setEditing(true); }}>继续编辑评论草稿</button>}</>}
-    {confirm && <div className="delete-confirm">删除这条批注？<button className="text-button" disabled={busy} onClick={() => setConfirm(false)}>取消</button><button className="text-button danger" disabled={busy} onClick={async () => {
+    {onDiscuss && <button className="annotation-discuss" onClick={() => onDiscuss(annotation)}><MessageSquare size={14}/> 问 Codex · 讨论这条批注<ArrowUpRight size={13}/></button>}
+    {codexMessageSources(annotation.comment).map(source=><button key={source.url} className="text-button" onClick={()=>onOpenCodexSource?.(source)}>查看原对话</button>)}
+    {libraryId&&<LegacyDiscussionHistory libraryId={libraryId} documentId={annotation.documentId} annotationId={annotation.id}/>}
+    {confirm && <div className="delete-confirm">删除这条批注？关联讨论会保留来源快照。<button className="text-button" disabled={busy} onClick={() => setConfirm(false)}>取消</button><button className="text-button danger" disabled={busy} onClick={async () => {
       setBusy(true); setError('');
       try { await onDelete(annotation.documentId, annotation.id); const value = drafts.edit(annotation); if (value) drafts.clear(value); if (alive.current) setConfirm(false); }
       catch { if (alive.current) setError('删除结果未确认，草稿仍保留。请重新打开文献核对。'); }

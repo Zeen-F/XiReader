@@ -121,3 +121,13 @@ test('capture return resolves only intact manifests and original PDF identities'
   assert.equal((await request(imageRoute)).status,200);
   await writeFile(join(imageFolder,'selection.png'),'truncated sync');assert.equal((await request(imageRoute)).status,409);
 });
+
+
+test('source links carry optional confirmed library identity without breaking legacy links', () => {
+  const libraryId = 'a'.repeat(64), target = { ...source, libraryId };
+  assert.equal(readSourceLink(sourceLinkSearch(target)).libraryId, libraryId);
+  for (const search of [`libraryId=${libraryId}`, `document=${id}&page=3&libraryId=unknown`,
+    `${sourceLinkSearch(target)}&libraryId=${libraryId}`]) assert.equal(readSourceLink(search).invalid, true);
+  assert.equal(Object.hasOwn(readSourceLink(sourceLinkSearch(source)), 'libraryId'), false);
+  assert.equal(new URLSearchParams(sourceLinkSearch(null, sourceLinkSearch(target))).has('libraryId'), false);
+});

@@ -35,13 +35,13 @@ VS Code 或兼容编辑器可打开根目录的 `PDF_Vibecoding.code-workspace`�
 
 `npm run dev` 使用独立的 `DEV_DATA_DIR`，不沿用生产 `PAPERDESK_DATA_DIR`，并清除继承的 `PAPERDESK_VAULT_DIR`／`PAPERDESK_VAULT_SUBDIR`，避免关联正式知识库。检查仓库模式时使用隔离的合成知识库，按 [仓库模式说明](obsidian-vault.md#源码浏览器版) 显式启动。自定义数据目录应位于项目的忽略目录或仓库外，不能放在 `src/`、`public/`、`dist/` 等源码或静态资源位置；仓库模式的缓存也必须位于整个知识库之外。按启动输出访问对应地址。
 
-Mac 和 Windows 启动器会在缺少依赖或构建产物时准备运行；已有 `dist/` 时不会自动判断源码是否更新，因此修改代码后应重新构建。已有服务只有在库身份、产品版本、启动协议与健康状态均匹配时才复用；旧服务缺少身份协议、不同库或非纸间服务会明确拒绝。服务启动先占用本机端口，再打开数据库，避免绑定竞争先迁移目标库。Windows 的 PowerShell 使用 `npm.cmd` / `npx.cmd`，无需放宽执行策略；桌面打包入口和资料位置见 [Windows 指南](windows.md)。
+Mac 和 Windows 启动器会在缺少依赖或构建产物时准备运行；已有 `dist/` 时不会自动判断源码是否更新，因此修改代码后应重新构建。已有服务只有在库身份、产品版本、启动协议与健康状态均匹配时才复用；旧服务缺少身份协议、不同库或非 XiReader 服务会明确拒绝。服务启动先占用本机端口，再打开数据库，避免绑定竞争先迁移目标库。Windows 的 PowerShell 使用 `npm.cmd` / `npx.cmd`，无需放宽执行策略；桌面打包入口和资料位置见 [Windows 指南](windows.md)。
 
 ## 检查
 
 1.2.0-beta.1 包含 Obsidian 仓库与个人页面书签。API 回归覆盖旧库在 DDL 前的一致性备份、schema 5 迁移、书签 CRUD／版本冲突、原位 PDF／外部导入、正式 v1／v2／v3 Markdown 兼容及索引重建；浏览器回归覆盖两种存储模式的添加、命名、跳转、草稿保护及迟到响应。`node scripts/test-vault-desktop.mjs` 另外检查真实 Electron 的仓库、外部导入、书签保存、正常退出和重开跳转；打包后追加 `--packaged <应用路径>`。所有资料均使用隔离临时库，默认结束后清理；仅需留证时通过 `PAPERDESK_ACCEPTANCE_DIR` 指定忽略的 `.local/` 内专用目录。以上是检查范围，[本版变更记录](history/1.2.0-beta.1.md) 保留原发布验收结果，当前 Windows 检查另记在本机摘要中。
 
-macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run desktop:dist` 生成，`npm run test:desktop` 检查独立窗口；打包后运行 `npm run test:desktop -- --packaged release/mac-arm64/Paperdesk.app` 再验收。所有桌面测试使用临时用户设置和文献库。构建与发布顺序见 [桌面预览版](desktop-release.md)。
+macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run desktop:dist` 生成，`npm run test:desktop` 检查独立窗口；打包后运行 `npm run test:desktop -- --packaged release/mac-arm64/XiReader.app` 再验收。所有桌面测试使用临时用户设置和文献库。构建与发布顺序见 [桌面预览版](desktop-release.md)。
 
 四项可靠性修复另用 `npm run test:desktop:reliability` 验证真实 Electron 的评论草稿、响应丢失重试、阅读位置保存及关闭／退出保护。测试库、配置和截图默认置于临时目录并在结束时清理；仅需留证时指定 `PAPERDESK_ACCEPTANCE_DIR` 到 `.local/` 内专用目录，保留必要截图和摘要，合成库仍清理。安装包使用同一命令追加 `-- --packaged <应用路径>`，Windows 可指定 `release/win-unpacked/Paperdesk.exe`。这项测试会在隔离库注入保存故障和受控异常退出；异常退出前已刷新浏览器存储，不能据此声称断电恢复。主动测试刷新只批准当次页面卸载，原生关闭和退出仍使用产品实际保存确认流程。
 
@@ -56,11 +56,11 @@ macOS Apple Silicon 桌面开发使用 `npm run desktop`。安装包由 `npm run
 | `node scripts/test-vault-desktop.mjs` | 真实 Electron 的 Obsidian 原位 PDF、外部导入和个人书签；打包应用追加 `--packaged <应用路径>` |
 | `npm run browser:dist` | 构建带生产界面的本机浏览器 ZIP，并生成独立校验文件；见 [浏览器发布包](browser-release.md) |
 | `npm run plugin:setup` | 核对当前阅读服务，绑定仓库外的本机插件配置 |
-| `npm run plugin:install` | 完成绑定并向本机 Codex 安装/启用 Paperdesk 插件 |
+| `npm run plugin:install` | 完成绑定并向本机 Codex 安装/启用 XiReader 插件 |
 
 API 与浏览器测试使用自有临时文献库和随机端口，不连接常驻正式库。自动浏览器检查包括 17 项选文回归，以及示例导入、单一笔记保存、导出与刷新恢复；目录回归使用原创生成 PDF，检查多级书签、折叠、筛选、正确跳页、窄窗面板互斥、笔记搜索、文献切换及手动／自动页码校正。另现场生成超过 50 MiB 的原创 PDF，通过文件选择器实际导入与渲染，防止旧文件大小限制回归；大文件不会作为二进制材料提交。CI 使用 Node.js 24，并安装 Chromium 后运行完整检查；工作流存在不等于当前提交已通过远端运行。
 
-笔记兼容回归先用 API 写入旧版两个非空字段，验证单个编辑区完整显示、未修改保存及导出不写回旧字段；编辑后统一保存，再刷新检查无重复。缺少基准版本的旧格式草稿恢复后先保留并核对，不自动覆盖新笔记；独立草稿位置、历史恢复入口和并发归档均经浏览器检查。历史保存竞态脚本的编辑器名称已同步为“笔记”，其运行仍需要原定的隔离浏览器工具环境。
+笔记兼容回归先用 API 写入旧版两个非空字段，验证单个编辑区完整显示、未修改保存及导出不写回旧字段；编辑后统一保存，再刷新检查无重复。本轮草稿使用已确认的 libraryId、documentId 和窗口 owner 隔离。旧的无库身份草稿只作为折叠的只读待核对材料，不自动恢复、提交或删除；新格式草稿仍需核对基准版本并遵守保存冲突保护。对应浏览器用例已更新，但必须实际运行后才能声称本轮 UI 验收通过。历史保存竞态脚本的编辑器名称已同步为“笔记”，其运行仍需要原定的隔离浏览器工具环境。
 
 开发服务启动后可打开 `/tests/selection-harness.html`，点击 “Run selection tests” 单独查看选文结果；此页不访问文献库。旧的 `tests/notes-race.browser.mjs` 属于特定浏览器工具环境的历史辅助脚本，不应直接对正式笔记运行。
 

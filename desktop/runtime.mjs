@@ -1,3 +1,4 @@
+import { fetch } from '../server/fetch.mjs';
 import { createServer } from 'node:http';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -101,7 +102,7 @@ export async function startDesktopRuntime({ dataDir, vaultDir, vaultSubdir = 'Pa
     });
     if (handler) return handler(request, response);
     response.writeHead(503, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ error: '纸间正在启动，请稍后重试。' }));
+    response.end(JSON.stringify({ error: 'XiReader 正在启动，请稍后重试。' }));
   });
   server.on('connection', socket => {
     sockets.add(socket);
@@ -165,7 +166,7 @@ function requireColumns(database, table, expected) {
   const definition = database.prepare('SELECT type FROM sqlite_master WHERE name = ?').get(table);
   const columns = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map(column => column.name));
   if (definition?.type !== 'table' || expected.some(column => !columns.has(column))) {
-    throw new Error('文献库结构不兼容或不完整，请选择完整的纸间文献库。');
+    throw new Error('文献库结构不兼容或不完整，请选择完整的 XiReader 文献库。');
   }
 }
 
@@ -179,7 +180,7 @@ export async function validateExistingLibrary(rawDataDir) {
     const directory = await stat(dataDir);
     const file = await stat(filename);
     if (!directory.isDirectory() || !file.isFile() || file.size < 100) {
-      throw new Error('这个目录没有完整的纸间文献库。');
+      throw new Error('这个目录没有完整的 XiReader 文献库。');
     }
     // SQLite readOnly alone may create WAL/SHM files. Immutable reads avoid
     // those mutations, but cannot include a live WAL, so refuse that case.
@@ -194,7 +195,7 @@ export async function validateExistingLibrary(rawDataDir) {
     uri.searchParams.set('immutable', '1');
     database = new DatabaseSync(uri.href, { readOnly: true });
     const schemaVersion = database.prepare('PRAGMA user_version').get().user_version;
-    if (schemaVersion > CURRENT_SCHEMA) throw new Error('文献库来自更新版本的纸间，请使用相应版本打开。');
+    if (schemaVersion > CURRENT_SCHEMA) throw new Error('文献库来自更新版本的 XiReader，请使用相应版本打开。');
     for (const [table, columns] of Object.entries(CORE_COLUMNS)) requireColumns(database, table, columns);
     if (schemaVersion < 4) throw new Error('这个文献库使用旧版结构。请先完整备份，再使用对应的源码或浏览器版本升级文献库后，重新选择此目录。');
     if (schemaVersion >= 2) requireColumns(database, 'annotations', ['kind']);
@@ -209,7 +210,7 @@ export async function validateExistingLibrary(rawDataDir) {
       throw new Error('文献库数据库检查未通过，请从完整备份恢复后再打开。');
     }
     const documents = database.prepare('SELECT id, page_count, byte_size FROM documents').all();
-    if (!documents.length) throw new Error('这个文献库还没有文献，请选择已有文献的纸间文献库。');
+    if (!documents.length) throw new Error('这个文献库还没有文献，请选择已有文献的 XiReader 文献库。');
     if (!(await stat(pdfDir)).isDirectory()) throw new Error('文献库缺少原始 PDF 目录。');
     let byteSize = 0;
     const pageCounts = new Map();
@@ -246,9 +247,9 @@ export async function validateExistingLibrary(rawDataDir) {
     }
     return { dataDir, libraryId: libraryIdentity(dataDir), schemaVersion, documentCount: documents.length, byteSize };
   } catch (error) {
-    if (['ENOENT', 'ENOTDIR'].includes(error.code)) throw new Error('这个目录缺少完整文献库或原始 PDF，请选择正确的纸间文献库。');
+    if (['ENOENT', 'ENOTDIR'].includes(error.code)) throw new Error('这个目录缺少完整文献库或原始 PDF，请选择正确的 XiReader 文献库。');
     if (['EACCES', 'EPERM'].includes(error.code)) throw new Error('无法读取这个文献库，请检查目录权限。');
-    if (error.code?.startsWith('ERR_SQLITE')) throw new Error('这个数据库不是兼容的纸间文献库或已损坏。', { cause: error });
+    if (error.code?.startsWith('ERR_SQLITE')) throw new Error('这个数据库不是兼容的 XiReader 文献库或已损坏。', { cause: error });
     throw error;
   } finally {
     database?.close();

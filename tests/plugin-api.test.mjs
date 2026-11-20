@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -254,7 +254,7 @@ test('reader inputs and transient PNG previews are validated and do not expand o
     assert.deepEqual(db.prepare('SELECT notes_zh, notes_en FROM documents WHERE id = ?').get(doc.id), { __proto__: null, notes_zh: '', notes_en: '' });
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM annotations').get().count, 0);
   } finally { db.close(); }
-  assert.deepEqual((await readdir(dataDir)).filter(name => !name.startsWith('paperdesk.sqlite')).sort(), ['pdfs']);
+  assert.deepEqual((await readdir(dataDir)).filter(name => !name.startsWith('paperdesk.sqlite') && !/^discussions\.sqlite(?:-(?:shm|wal))?$/.test(name)).sort(), ['pdfs']);
 });
 
 test('append preserves legacy notes, refuses dirty/conflicting writes and is idempotent across retries', async t => {
@@ -333,4 +333,39 @@ test('append validation, capacity and expired idempotency records cannot silentl
   assert.equal(saved.notesZh.length, MAX_NOTE_LENGTH);
   await error(await app.request(append, { text: 'y', expectedNotesRevision: saved.notesRevision, requestId: randomUUID() }));
   assert.deepEqual((await app.get(url)).document, saved);
+});
+
+
+test('confirmed reader evidence is library/hash bound, preserves exact selection and rejects replaced PDF bytes', async t => {
+  const { app, dataDir } = await library(t);
+  const doc = await app.upload(), { libraryId } = await app.get('/api/plugin/status');
+  const sessionId = randomUUID(), url = `/api/reader-sessions/${sessionId}`;
+  const selected = { kind: 'text', text: 'Only this approved synthetic quote', rects: [rect] };
+  const body = sessionBody(doc, { selection: selected, selectionId: randomUUID(), expectedLibraryId: libraryId, expectedPdfSha256: doc.pdfSha256 });
+  await error(await app.request(url, { ...body, expectedLibraryId: 'f'.repeat(64) }), 409);
+  await error(await app.request(url, { ...body, expectedPdfSha256: 'f'.repeat(64) }), 409);
+  await error(await app.request(url, { ...body, documentId: randomUUID() }), 404);
+  await error(await app.request(url, { ...body, selection: { ...selected, annotationId: randomUUID() } }));
+  await error(await app.request(url, { ...body, selection: { ...selected, url: 'https://model.example/guessed-source' } }));
+  await error(await app.request(url, { ...body, selection: { ...selected, text: 'x'.repeat(12001) } }));
+  const shared = await app.request(url, body); assert.equal(shared.status, 200);
+  const receipt = await shared.json(), context = await app.get(`/api/reader-context?sessionId=${sessionId}`);
+  assert.equal(receipt.libraryId, libraryId); assert.deepEqual(context.evidence, receipt.evidence);
+  assert.equal(context.evidence.schema, 'paperdesk-evidence/v1');
+  assert.equal(context.evidence.libraryId, libraryId); assert.equal(context.evidence.documentId, doc.id);
+  assert.equal(context.evidence.pdfSha256, doc.pdfSha256); assert.equal(context.evidence.physicalPage, 2);
+  assert.equal(context.evidence.quote, selected.text); assert.deepEqual(context.evidence.rects, selected.rects);
+  assert.equal(context.evidence.sessionId, sessionId);
+  assert.equal(Object.hasOwn(context.evidence.sourceRef, 'annotationId'), false, 'Never fabricate an anchor for a transient quote');
+  assert.equal((await app.get(`/api/documents/${doc.id}`)).document.notesZh, '', 'Sharing cannot write notes');
+  const verifiedSource = `/api/documents/${doc.id}?expectedLibraryId=${libraryId}&expectedPdfSha256=${doc.pdfSha256}`;
+  assert.equal((await app.get(verifiedSource)).document.pdfSha256, doc.pdfSha256);
+  await error(await app.request(`/api/documents/${doc.id}?expectedLibraryId=${'f'.repeat(64)}&expectedPdfSha256=${doc.pdfSha256}`, undefined, 'GET'), 409);
+  await writeFile(path.join(dataDir, 'pdfs', `${doc.id}.pdf`), Buffer.from('Synthetic changed PDF bytes'));
+  await error(await app.request(verifiedSource, undefined, 'GET'), 409);
+  await error(await app.request(`/api/reader-context?sessionId=${sessionId}`, undefined, 'GET'), 409);
+  await error(await app.request(`/api/reader-sessions/${randomUUID()}`, body), 409);
+  await error(await app.request(url, { ...body, selectionId: randomUUID() }), 409, 'An explicit reshare must verify bytes even when quote and geometry are unchanged');
+  assert.equal((await app.request(url, sessionBody(doc, { expectedLibraryId: libraryId }))).status, 200, 'Stopping shared context does not require a readable PDF');
+  assert.equal((await app.get(`/api/reader-context?sessionId=${sessionId}`)).evidence, null);
 });
