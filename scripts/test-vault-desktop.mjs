@@ -165,14 +165,16 @@ async function bookmarkSecondPage(document) {
   await panel.getByRole('button', { name: '保存书签名称', exact: true }).click();
   const renameResponse = await renamed; assert.equal(renameResponse.status(), 200);
   const saved = (await renameResponse.json()).bookmark;
-  await expect(panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true })).toBeVisible();
-  await number.fill('1'); await number.press('Enter');
+  const savedBookmark = panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true });
+  await expect(savedBookmark).toBeEnabled();
+  const previousPage = page.getByRole('button', { name: '上一页', exact: true });
+  await previousPage.click();
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: `书签：${title}，PDF 第 2 页`, exact: true }).click();
+  await savedBookmark.click();
   await expect(number).toHaveValue('2');
   await expect(page.getByLabel('PDF 第 2 页', { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(artifacts, `${label}-bookmarks.png`) });
-  await number.fill('1'); await number.press('Enter');
+  await previousPage.click();
   await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
   const close = page.getByRole('button', { name: '收起书签', exact: true });
   if (await close.isVisible()) await close.click();
@@ -361,7 +363,12 @@ try {
   const searchable = Buffer.concat([original, Buffer.from('\n% same-edition replacement\n')]);
   await writeFile(sourcePdf, searchable);
   await launch();
+  await page.setViewportSize({ width: 1024, height: 768 });
   await expect.poll(async () => (await request('/documents')).documents.length).toBe(1);
+  // The intact PDF opens while the replaced source awaits review. In a narrow
+  // window this selects the initial side panel once the document is rendered.
+  await expect(page).toHaveURL(url => url.searchParams.get('document') === imported.id);
+  await expect(page.getByLabel('PDF 第 1 页', { exact: true })).toBeVisible();
   await expandPanel('library-panel');
   await page.getByRole('button', { name: `核对新版 · ${document.title}`, exact: true }).click();
   const review = page.getByRole('dialog', { name: '核对 PDF 文件' });
