@@ -129,6 +129,9 @@ export async function libraryThemesWorkflow({ context, base }) {
     await expect(notes).toHaveValue('仍在编辑的隔离草稿，不应因切换文件夹丢失。');
     assert.equal((await json(`/documents/${a.id}`)).document.notesZh, note);
     await page.setViewportSize({ width: 688, height: 820 });
+    // Narrow reading layouts deliberately show only the active auxiliary pane.
+    await expect(page.getByRole('button',{name:'展开文献栏',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'展开文献栏',exact:true}).click();
     await expect(sidebar.getByRole('button', { name: '未分类', exact: true })).toBeVisible();
     await expect(sidebar.getByRole('button', { name: '主题：夜读', exact: true })).toBeVisible();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);

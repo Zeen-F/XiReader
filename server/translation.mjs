@@ -1,3 +1,4 @@
+import { fetch } from './fetch.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, closeSync, constants, existsSync, lstatSync, openSync } from 'node:fs';
@@ -21,7 +22,7 @@ const accountOf = current => current.provider === 'baidu' ? sha(current.app_id) 
 
 /** Independent sidecar: translation never reads or changes the document DB. */
 export function registerTranslationApi({ app, dataDir, HttpError, options = {} }) {
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const fetchImpl = options.fetchImpl || fetch;
   const now = options.clock?.now || Date.now;
   const sleep = options.clock?.sleep || ((ms, signal) => delay(ms, undefined, { signal }));
   const timeoutMs = options.timeoutMs ?? 15_000;

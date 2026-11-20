@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createEvidenceSnapshot, assertEvidenceReceipt } from '../shared/evidence-snapshot.mjs';
 import { readSourceLink } from '../shared/source-navigation.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,21 +37,21 @@ async function fitPreview(preview) {
 
 // The same UUID survives React effects and back/forward cache restoration, but
 // independent tabs get independent sessions. Shared selections are never stored.
-export function useCodexContext({ document, page, selection, notesDirty, onDocument, onError }) {
+export function useCodexContext({ libraryId, document, page, selection, notesDirty, onDocument, onError }) {
   const [identity] = useState(() => { const embedded = embeddedSettings(); return { ...embedded, sessionId: embedded.sessionId || crypto.randomUUID() }; });
   const [shared, setShared] = useState(null), [status, setStatus] = useState('connecting');
   const [dismissed, setDismissed] = useState(false);
-  const sharedSelection = shared && shared.source === selection && selection?.documentId === document?.id && selection.page === page ? shared.payload : null;
+  const sharedSelection = shared && shared.evidence.libraryId === libraryId && shared.evidence.pdfSha256 === document?.pdfSha256 && shared.source === selection && selection?.documentId === document?.id && selection.page === page ? shared.payload : null;
   const latest = useRef(null), sender = useRef(null), shareAttempt = useRef(0), localSelection = useRef(selection);
   localSelection.current = selection;
-  latest.current = { document, page, selection: sharedSelection, shareId: sharedSelection ? shared.shareId : null, notesDirty, onDocument };
+  latest.current = { libraryId, document, page, evidence: sharedSelection ? shared.evidence : null, selection: sharedSelection, shareId: sharedSelection ? shared.shareId : null, notesDirty, onDocument };
   useEffect(() => {
     let stopped = false, leaving = false, running = false, wanted = false, generation = 0;
     const endpoint = `/api/reader-sessions/${identity.sessionId}`;
     const publish = (state, selectionPresent) => {
       if (identity.parentOrigin) window.parent.postMessage({ type: 'paperdesk-context', context: {
         sessionId: identity.sessionId, documentId: state.document?.id || null, page: state.page,
-        sharedSelection: selectionPresent, shareId: selectionPresent ? state.shareId : null, notesDirty: state.notesDirty,
+        libraryId: state.libraryId, evidence: selectionPresent ? state.evidence : null, sharedSelection: selectionPresent, shareId: selectionPresent ? state.shareId : null, notesDirty: state.notesDirty,
       } }, identity.parentOrigin);
     };
     const send = async () => {
@@ -60,17 +61,19 @@ export function useCodexContext({ document, page, selection, notesDirty, onDocum
       while (wanted && !stopped && !leaving) {
         wanted = false;
         const state = latest.current, atGeneration = generation;
-        if (!state.document) continue;
+        if (!state.document || !state.libraryId) continue;
         try {
           // A stalled request must release the serialized sender so a pending
           // heartbeat can publish the latest state and refresh external notes.
           const response = await fetch(endpoint, { method: 'POST', signal: AbortSignal.timeout(10_000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
             documentId: state.document.id, page: state.page, selection: state.selection,
+            expectedLibraryId: state.libraryId, ...(state.evidence ? { expectedPdfSha256: state.evidence.pdfSha256, selectionId: state.shareId } : {}),
             notesDirty: state.notesDirty, visible: window.document.visibilityState === 'visible',
           }) });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || '阅读连接暂时不可用');
-          if (!stopped && !leaving && atGeneration === generation && latest.current.document?.id === state.document.id) {
+          if (state.evidence) assertEvidenceReceipt(state.evidence, result.evidence);
+          if (!stopped && !leaving && atGeneration === generation && latest.current.document?.id === state.document.id && latest.current.libraryId === state.libraryId) {
             setStatus(state.selection ? 'shared' : 'ready');
             state.onDocument(result.document, state.document.notesRevision);
             publish(state, Boolean(state.selection));
@@ -112,19 +115,20 @@ export function useCodexContext({ document, page, selection, notesDirty, onDocum
       fetch(endpoint, { method: 'DELETE', keepalive: true }).catch(() => {});
     };
   }, [identity]);
-  useEffect(() => { sender.current?.(); }, [document?.id, page, sharedSelection, notesDirty]);
+  useEffect(() => { sender.current?.(); }, [libraryId, document?.id, document?.pdfSha256, page, sharedSelection, notesDirty]);
   const share = async () => {
     if (!selection || selection.documentId !== document?.id || selection.page !== page) return;
     const attempt = ++shareAttempt.current;
     try {
+      const evidence = createEvidenceSnapshot({ libraryId, document, selection: { ...selection, quote: selection.kind === 'region' ? '' : selection.quote }, sessionId: identity.sessionId });
       const payload = { kind: selection.kind || 'text', text: selection.kind === 'region' ? '' : selection.quote, rects: selection.rects.map(rect => ({ ...rect })) };
       if (selection.kind === 'region') payload.preview = await fitPreview(selection.preview);
       if (attempt !== shareAttempt.current || localSelection.current !== selection) return;
-      setShared({ source: selection, payload, shareId: crypto.randomUUID() }); setStatus('connecting'); setDismissed(false);
+      setShared({ source: selection, evidence, payload, shareId: crypto.randomUUID() }); setStatus('connecting'); setDismissed(false);
     } catch (error) { if (attempt === shareAttempt.current) onError?.(error.message); }
   };
   // Deriving selection above also clears it on the very first render after a
   // page/document/selection change, before the heartbeat can send an old quote.
   return { sessionId: identity.sessionId, status: sharedSelection && status === 'shared' ? 'shared' : status === 'shared' ? 'ready' : status,
-    dismissed, dismiss: () => setDismissed(true), share, clear: () => { shareAttempt.current++; setShared(null); setDismissed(true); }, shared: Boolean(sharedSelection) };
+    evidence: sharedSelection ? shared.evidence : null, dismissed, dismiss: () => setDismissed(true), share, clear: () => { shareAttempt.current++; setShared(null); setDismissed(true); }, shared: Boolean(sharedSelection) };
 }

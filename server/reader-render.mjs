@@ -32,7 +32,7 @@ export function createReaderRenderer({ timeoutMs = 30_000, maxQueue = 4 } = {}) 
   const workerFile = fileURLToPath(new URL('./reader-render-worker.mjs', import.meta.url));
   const waiting = [];
   let active = null, closed = false, closing;
-  const unavailable = () => new ReaderRenderError(503, '页面预览服务已关闭，请重新连接纸间。');
+  const unavailable = () => new ReaderRenderError(503, '页面预览服务已关闭，请重新连接 XiReader。');
 
   function settle(job, error, result) {
     if (job.settled) return;

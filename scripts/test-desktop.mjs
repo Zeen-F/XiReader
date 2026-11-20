@@ -169,7 +169,7 @@ try {
   await page.screenshot({ path: path.join(artifactDir, `${label}-reader.png`) });
 
   // Quit immediately after typing: the native quit handshake flushes the queue.
-  await page.getByRole('button', { name: /^笔记$/, exact: true }).click();
+  await page.getByRole('tab', { name: '笔记', exact: true }).click();
   const finalNotes = notes + '\n\n立即退出前新增的内容。';
   await editor.fill(finalNotes);
   await quit();

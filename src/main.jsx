@@ -5,6 +5,7 @@ import './style.css';
 import './shanlan-preview.css';
 import './shelf-preview.css';
 import './shelf-layout.css';
+import './reading-workspace.css';
 // Local visual study only: no saved theme, library or desktop preference changes.
 if (new URLSearchParams(window.location.search).get('visual') === 'shanlan') {
   document.documentElement.dataset.preview = 'shanlan';

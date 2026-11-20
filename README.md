@@ -4,21 +4,13 @@
 
 我是软件开发小白，这个软件是通过和 AI 对话、反复试用和修改，**vibecoding（vibe coding）** 出来的。最初只是想给自己做一个方便读 PDF、划重点和记笔记的工具，于是有了最初的「纸间」，现更名为 XiReader。目前仍是预览版，欢迎反馈问题、提建议或提交改进。
 
-项目现名 XiReader，原名纸间 Paperdesk；仓库已从 `Zeen-F/PDF_Vibecoding` 更名为 [Zeen-F/XiReader](https://github.com/Zeen-F/XiReader)。已有本地工作区无需改名；`Paperdesk.app` / `Paperdesk.exe`、安装包文件名、`paperdesk` API/MCP 标识、`PAPERDESK_*` 配置和现有资料目录继续沿用，避免影响已有文献库和插件绑定。
+XiReader 原名纸间 Paperdesk。macOS 应用名为 `XiReader.app`，Windows 入口为 `Paperdesk.exe`。已有文献库、插件标识和 `PAPERDESK_*` 配置继续沿用。
 
-## 版本与获取方式
+## 1.2.0-beta.7 预览版
 
-截至 **2026-10-31**，最新公开预发布为 **1.2.0-beta.6**（2026-10-22 发布）。下述开发分支仍沿用这个 package 版本号，因此不能仅凭版本号判断是否包含新侧栏。
+本版将统一 Codex 阅读侧栏、Obsidian 文件夹浏览和逐项目录页码校正整合到同一版本。同一路径上的 PDF 被替换后，其他文献仍可打开。核对提示并确认对应版本后，可以重新关联该 PDF。下载入口和源码运行方法见下文。
 
-| 版本／分支 | 包含什么 | 如何获取 |
-| --- | --- | --- |
-| 已发布 `v1.2.0-beta.6`（`ed204b3`） | PDF 阅读、批注、笔记、Obsidian 库、翻译 API、Codex MCP 插件、知识工作台交换和山岚 V2；beta.6 修复普通桌面入口读取已保存的山岚外观 | 下方 Release 安装包；应用仍显示 Paperdesk |
-| `main` 源码 | 在 beta.6 基础上增加 Obsidian 文件夹层级浏览和目录条目页码校正 | 按下方源码步骤从 `main` 构建 |
-| 开发分支 `codex/xireader-codex-sidebar`，本文核对至 `b7b3f0a` | XiReader 显示名称、可调阅读侧栏、统一 Codex 阅读会话、按需补读和回答追加 | [开发分支源码](https://github.com/Zeen-F/XiReader/tree/codex/xireader-codex-sidebar)，按下方源码步骤切换分支并重新构建；尚未合入 `main` 或公开发布 |
-
-下载 beta.6 不会获得下述新 Codex 侧栏。源码更新也不会自动替换已安装的应用；已发布功能以 [beta.6 发布页](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.6) 为准。
-
-## 开发版：统一 Codex 阅读会话
+## 统一 Codex 阅读会话
 
 - 阅读优先的可调左右侧栏；折叠不卸载已经打开的笔记和 Codex 编辑器。
 - 批注“问 Codex”打开本篇文献的当前会话，首次自动创建；后续批注更换下一条消息的引用，保留同一会话和草稿。只有用户选择“新对话”才另开会话，点击批注不会自动发送。
@@ -29,24 +21,24 @@
 
 使用前先在本机安装并登录 Codex CLI；侧栏通过 `codex app-server` 连接它，使用已有 CLI 登录状态，不在侧栏收集密码，也不需要翻译 API 密钥或下文的 MCP 插件。当前实现按 CLI 0.164.0 协议核验；其他版本能否使用以实际连接检查为准。若找不到 CLI，可在启动 XiReader 前设置 `PAPERDESK_CODEX_CLI` 为可执行文件的完整路径。
 
-1. 运行上述开发分支，打开文献，在右侧“Codex”页新建会话，或点击批注的“问 Codex”。
+1. 打开 XiReader 和一篇文献，在右侧“Codex”页新建会话，或点击批注的“问 Codex”。
 2. 点击“连接 Codex”，连接可用后选择模型和推理强度；缺少认证时先在终端完成 Codex 登录，再重新检查连接。
 3. 选择或移除本轮阅读引用，输入问题，点击“核对上下文”，确认后再“发送给 Codex”。需要补读时，单独勾选“允许补读本篇”。
 4. 回答留在此文献的会话中；需要写入时点击“保存回答到笔记”或“保存到此批注”，预览后确认追加。
 
 上下文只包含有界文字层、页码与位置：每次最多附带三页，每页最多 4000 字符；可见矩形不代表文字已精确裁剪到屏幕范围。侧栏不发送页面图像，不做 OCR。补读每次最多三页、每轮最多四次，不开放其他文献或整库；发送的资料可能进入 Codex 服务的会话记录。连接可用也不保证后续请求的网络和额度。
 
-操作、隔离权限、容量和恢复边界见 [Codex 阅读侧栏](https://github.com/Zeen-F/XiReader/blob/b7b3f0af23a93d788b7d16b4e18c425ee977a31e/docs/codex-sidebar.md)。旧存储与导出兼容规则见 [批注讨论说明](https://github.com/Zeen-F/XiReader/blob/b7b3f0af23a93d788b7d16b4e18c425ee977a31e/docs/annotation-discussions.md)。真实模型、宿主插件和打包应用需分别验证，不能用模拟测试代替。
+操作、隔离权限、容量和恢复边界见 [Codex 阅读侧栏](docs/codex-sidebar.md)。旧存储与导出兼容规则见 [批注讨论说明](docs/annotation-discussions.md)。真实模型、宿主插件和打包应用需分别验证，不能用模拟测试代替。
 
 ## 下载、启动与升级
 
-以下为已发布的 **1.2.0-beta.6** 安装包，无需编译源码。[下载版本与校验值](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.6) 以 Release 页面实际提供的文件为准。
+**1.2.0-beta.7** 提供以下安装包，无需编译源码。[下载版本与校验值](https://github.com/Zeen-F/XiReader/releases/tag/v1.2.0-beta.7) 以 Release 页面实际提供的文件为准。
 
 | 入口 | 使用方法 |
 | --- | --- |
-| [Windows x64 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
-| [macOS ARM64 DMG](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-mac-arm64.dmg) | 将发布包中的 `Paperdesk.app` 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
-| [本机浏览器 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.6/Paperdesk-1.2.0-beta.6-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
+| [Windows x64 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.7/Paperdesk-1.2.0-beta.7-win-x64.zip) | 完整解压到固定应用目录，打开 `Paperdesk.exe`；无需 Node.js。整个目录是一套应用，不能只复制 EXE。 |
+| [macOS ARM64 DMG](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.7/Paperdesk-1.2.0-beta.7-mac-arm64.dmg) | 将发布包中的 `XiReader.app` 拖入「应用程序」；无需 Node.js。当前预览包尚未经过 Apple 签名或公证。 |
+| [本机浏览器 ZIP](https://github.com/Zeen-F/XiReader/releases/download/v1.2.0-beta.7/Paperdesk-1.2.0-beta.7-browser.zip) | 安装 Node.js 24+，在解压目录运行 `npm ci --omit=dev`、`npm start`，打开 `http://127.0.0.1:4317`；PowerShell 使用 `npm.cmd`。 |
 
 发布页另有 macOS ARM64 应用 ZIP。Windows 包未签名，macOS 包未签名／公证；首次启动按系统提示核对来源。Windows、macOS 和浏览器包的校验清单分别为 `SHA256SUMS-win`、`SHA256SUMS`、`SHA256SUMS-browser`。当前未提供 Intel Mac、Windows ARM64、Linux 或移动端安装包。
 
@@ -67,17 +59,17 @@
 | 专注与返回 | 临时收起阅读侧栏并保留笔记编辑区和草稿；来源定位后可返回原页及窗口内阅读位置。 |
 | 弹层与窄窗 | 显示设置和翻译卡支持键盘焦点、Esc 关闭及窄窗口布局。 |
 
-beta.6 已包含集中显示设置、专注阅读、来源返回、翻译确认和受权限控制的 MCP 搜索；开发分支进一步增加可调左右侧栏及折叠时保留已挂载编辑器的行为。详细操作见 [阅读布局与来源定位](docs/reader-display.md)。森林、暖砂、雾蓝、夜读四套皮肤不会改变 PDF 原始颜色。
+左右侧栏可以调宽或折叠。折叠后保留已打开的编辑器及草稿。详细操作见 [阅读布局与来源定位](docs/reader-display.md)。森林、暖砂、雾蓝、夜读四套皮肤不会改变 PDF 原始颜色。
 
 ## 山岚 V2 外观
 
-beta.6 和当前源码均提供山岚书桌、紧凑书架、仅按标题的快速定位，以及晨间／月下场景。快速定位支持 ↑↓、Enter、Esc，关闭后焦点返回入口；文献栏边界可以拖动，也可用左右方向键调宽、Home／End 调到边界、双击恢复默认。密度与场景仅在本次页面内生效，不改写已保存的四套主题。
+本版提供山岚书桌、紧凑书架、仅按标题的快速定位，以及晨间／月下场景。快速定位支持 ↑↓、Enter、Esc，关闭后焦点返回入口；文献栏边界可以拖动，也可用左右方向键调宽、Home／End 调到边界、双击恢复默认。密度与场景仅在本次页面内生效，不改写已保存的四套主题。
 
 - 浏览器：在当前本机服务地址后加 `/?visual=shanlan`。去掉该参数即回到原外观。
 - 源码桌面：构建后运行 `npx.cmd electron . --shanlan-daily`；已有完整桌面包可运行 `Paperdesk.exe --shanlan-daily`。此模式沿用原配置及文献库，使用前正常退出已有窗口。
 - 隔离预览：使用 `--shanlan-preview`，可附加 `--preview-profile=完整目录路径` 指定独立配置目录；默认使用单独的预览配置。预览不会迁移日常文献库，测试时只导入合成资料。
 
-新外观自 beta.5 提供；beta.6 的普通桌面入口读取当前配置目录的 `appearance.json`（`{"visual":"shanlan"}`），不更换配置目录或资料库。未设置时保留原外观。`npm.cmd run check` 包含合成资料的山岚界面回归；浏览器测试不代表真实模型、Codex 宿主或各平台安装器均已验收。
+新外观自 beta.5 提供；自 beta.6 起，普通桌面入口读取当前配置目录的 `appearance.json`（`{"visual":"shanlan"}`），不更换配置目录或资料库。未设置时保留原外观。`npm.cmd run check` 包含合成资料的山岚界面回归；浏览器测试不代表真实模型、Codex 宿主或各平台安装器均已验收。
 
 ## 划词与手动选段翻译
 
@@ -94,7 +86,7 @@ beta.6 和当前源码均提供山岚书桌、紧凑书架、仅按标题的快�
 
 ## Codex MCP 插件：在 Codex 中使用阅读器
 
-这是已有的外部 Codex 会话入口，与开发版内置阅读侧栏分别配置、分别保存对话。安装插件不会给 beta.6 增加新侧栏；使用侧栏也不必先安装插件。
+这是外部 Codex 会话的入口。内置阅读侧栏直接连接本机 CLI，两者分别保存对话。
 
 插件连接本机 XiReader 服务。阅读器中的普通浏览不自动共享全文；核对选区后再点“交给 Codex”，需要回答时再发送问题。AI 回答留在当前对话，只有明确要求记录时才追加笔记；未保存草稿或版本冲突会阻止覆盖。
 
@@ -104,7 +96,7 @@ beta.6 和当前源码均提供山岚书桌、紧凑书架、仅按标题的快�
 npm.cmd run plugin:install
 ```
 
-命令会准备本机绑定、注册本地 marketplace 并安装插件。安装后在 Codex 新会话启用插件并核对返回的资料库身份。beta.6 与 main 的插件仍显示“纸间 Paperdesk”，可说“打开纸间阅读器”；开发分支显示“XiReader”，可说“打开 XiReader 阅读器”。已有绑定不一致时先确认目标库，不要覆盖配置。移动运行时目录或升级桌面包后需要重新核对绑定；自定义端口不能照抄默认的 4317。完整安装和绑定步骤见 [Codex 插件说明](docs/codex-plugin.md)。
+命令会准备本机绑定、注册本地 marketplace 并安装插件。安装后在 Codex 新会话启用插件并核对返回的资料库身份。本版插件显示“XiReader”，可说“打开 XiReader 阅读器”。已有绑定不一致时先确认目标库，不要覆盖配置。移动运行时目录或升级桌面包后需要重新核对绑定；自定义端口不能照抄默认的 4317。完整安装和绑定步骤见 [Codex 插件说明](docs/codex-plugin.md)。
 
 MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本机显式授权，授权包含内容范围、有效期及预算；不因一句“搜索文献”自动开放整个资料库。主动共享或检索返回给 Codex 的内容可能进入模型请求。
 
@@ -116,14 +108,14 @@ MCP 文献搜索默认只搜索标题。正文、笔记和批注检索需要本�
 
 在工作台收集箱筛选材料、预览来源并选择参考笔记，再确认共享给 Codex 或自己的模型 API。生成结果进入待审草稿，结合固定的原文快照核对后再保存；原文、个人假设、AI 推断和待验证项应分别保留。来源链接可返回原 PDF 页和选区，文件变化或丢失时会提示核对，不会静默替换来源。
 
-beta.6 已包含 XiReader 一侧的选区导出与来源返回，知识工作台需要另行运行并连接同一知识库；不会随 XiReader 安装包自动安装。接口、离线导入和返回规则见 [知识工作台交换说明](docs/knowledge-workbench.md)。
+XiReader 提供选区导出与来源返回，知识工作台需要另行运行并连接同一知识库；不会随 XiReader 安装包自动安装。接口、离线导入和返回规则见 [知识工作台交换说明](docs/knowledge-workbench.md)。
 
 ## 数据、保存与恢复
 
 - 普通阅读、搜索、批注与笔记在本机处理，不需要翻译密钥或 Codex 插件。
 - Obsidian 模式下，已有 PDF 保持原位；外部导入副本保存在 `Paperdesk/PDFs/`，笔记、批注和页面书签在 `Paperdesk/Notes/`。正文可在两边编辑，受管理的标题、批注和书签在 XiReader 修改。
 - 桌面文献库与应用目录分开；源码浏览器版默认用 `data/`，开发模式用隔离的 `.local/dev-data/`。索引、翻译设置及恢复资料不作为正式笔记写进知识库。
-- 开发版 Codex 会话也需备份：独立库保存在 `codex-conversations.sqlite`，Obsidian 模式保存在 `Paperdesk/CodexConversations/<文献 ID>.json`；仅备份笔记或重建缓存不能替代这些正式会话记录。
+- Codex 会话也需备份：独立库保存在 `codex-conversations.sqlite`，Obsidian 模式保存在 `Paperdesk/CodexConversations/<文献 ID>.json`；仅备份笔记或重建缓存不能替代这些正式会话记录。
 - 保存失败或版本冲突会保留输入并要求核对；正常桌面关闭等待待保存内容。评论草稿属于当前浏览器／桌面配置，不能替代文献库备份。
 - 跨盘保存保留可恢复的原文件，并检查副本和并发修改。云盘 PDF 短暂改变元数据时有界重读，持续变化或校验不一致仍拒绝继续。详见 [跨盘保存与成品验证](docs/vault-cross-volume-recovery.md)。
 
@@ -136,8 +128,6 @@ beta.6 已包含 XiReader 一侧的选区导出与来源返回，知识工作台
 ```powershell
 git clone https://github.com/Zeen-F/XiReader.git
 cd XiReader
-# 需要上文的新 Codex 侧栏时，先切换开发分支；只运行 main 则省略此行。
-git switch --track origin/codex/xireader-codex-sidebar
 npm.cmd ci
 npm.cmd run desktop
 ```
@@ -155,7 +145,7 @@ npm.cmd run test:desktop -- --packaged release/win-unpacked/Paperdesk.exe
 
 Windows 目录包入口为 `release/win-unpacked/Paperdesk.exe`。打包需要本目录中的完整物理依赖，不能用 Junction／symlink 根 `node_modules`；打包检查会核对生产依赖和 MCP 面板资源。macOS 打包入口为 `npm run desktop:pack`。安装依赖需要联网；测试使用合成资料，详见 [开发指南](docs/development.md)。
 
-仅在上述侧栏开发分支中，另有 `node scripts/test-codex-chat.mjs`、`node scripts/test-codex-unified.mjs` 和 `node scripts/test-codex-ux.mjs`；main 尚无这些脚本。切换开发分支并构建后再运行，默认使用模拟模型。这些检查不等于真实 Codex 连通、成品或公开发布验收；真实模型测试的前提和独立命令见 [侧栏验证说明](https://github.com/Zeen-F/XiReader/blob/b7b3f0af23a93d788b7d16b4e18c425ee977a31e/docs/codex-sidebar.md#模块和验证)。
+阅读侧栏另有 `node scripts/test-codex-chat.mjs`、`node scripts/test-codex-unified.mjs` 和 `node scripts/test-codex-ux.mjs`。在本目录完成构建后运行，默认使用模拟模型。这些检查不等于真实 Codex 连通、成品或公开发布验收；真实模型测试的前提和独立命令见 [侧栏验证说明](docs/codex-sidebar.md#模块和验证)。
 
 ## 限制与反馈
 

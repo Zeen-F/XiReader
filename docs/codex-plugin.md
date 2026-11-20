@@ -1,12 +1,12 @@
-# 纸间 Codex 插件
+# XiReader Codex 插件
 
-插件通过本机 HTTP API 连接已有纸间工作区，MCP 使用官方 SDK 的 stdio 传输。它不直接打开 SQLite，不复制个人文献到插件缓存，也不把本机阅读器发布到公网。
+插件通过本机 HTTP API 连接已有 XiReader 工作区，MCP 使用官方 SDK 的 stdio 传输。它不直接打开 SQLite，不复制个人文献到插件缓存，也不把本机阅读器发布到公网。
 
 0.9.0 保留单层文件夹和四套阅读皮肤，并增加软件内多服务 API 文字选区翻译。翻译设置与译文只在阅读器内显示，配置说明见 [软件内翻译](translation.md)。唯一问答路径仍是当前 Work／Codex 对话；分类和外观操作不会发送消息或共享模型上下文。预览确认后发问，回答留在当前对话；只有明确要求记录时才追加笔记。
 
 ## 本机安装
 
-需要 Node.js 24 或更新版本、工作区依赖，以及支持本地插件的 Codex CLI/桌面客户端。Windows 与 macOS 共用同一份插件和原生阅读面板。当前 Paperdesk 1.2.0-beta.2 沿用 schema 5；旧库升级前先正常停止旧服务并完整备份，具体要求见 [桌面升级说明](desktop-release.md)。在工作区运行：
+需要 Node.js 24 或更新版本、工作区依赖，以及支持本地插件的 Codex CLI/桌面客户端。Windows 与 macOS 共用同一份插件和原生阅读面板。当前 XiReader 1.2.0-beta.2 沿用 schema 5；旧库升级前先正常停止旧服务并完整备份，具体要求见 [桌面升级说明](desktop-release.md)。在工作区运行：
 
 ```sh
 npm ci
@@ -32,7 +32,7 @@ npm.cmd run plugin:install
 
 安装命令会完成绑定和安装，不必再单独运行 setup。支持官方 npm 安装的 Codex CLI 和 PATH 中的原生 `codex.exe`，直接传递中文及空格路径，不依赖 Bash 或执行 `.ps1`。找不到 CLI 时应先安装官方 Codex CLI 并重新打开终端。Windows 默认配置为 `%USERPROFILE%\.config\paperdesk\plugin.json`；自动启动的后台阅读服务隐藏控制台，并清除宿主遗留的其他资料库环境变量。
 
-安装后关闭旧面板，在 Codex 新会话中启用“纸间 Paperdesk”，说“打开纸间阅读器”；插件工具 `paperdesk_open_reader` 打开 Codex 内的原生阅读面板。安装成功、MCP 协议正常和当前宿主实际打开是三个不同检查，当前会话若未刷新工具清单，需要新会话。四套皮肤在面板顶部选择并保存在绑定库中。
+安装后关闭旧面板，在 Codex 新会话中启用“XiReader”，说“打开 XiReader 阅读器”；插件工具 `paperdesk_open_reader` 打开 Codex 内的原生阅读面板。安装成功、MCP 协议正常和当前宿主实际打开是三个不同检查，当前会话若未刷新工具清单，需要新会话。四套皮肤在面板顶部选择并保存在绑定库中。
 
 设置程序从 `/api/plugin/status` 核对服务及资料库身份，生成 `~/.config/paperdesk/plugin.json`。已有配置绑定另一工作区或资料库时不会覆盖。安装命令登记仓库 marketplace `paperdesk-local` 并安装 `paperdesk@paperdesk-local`。安装后在新会话中检查插件与 `paperdesk_status`；实际启用状态以宿主回读为准。
 
@@ -55,7 +55,7 @@ npm.cmd run plugin:install
 
 ## 使用与分享边界
 
-- “打开纸间”打开原生阅读面板，并返回准确本机备用链接。用户已确认 0.2.0 面板能在 Codex 中打开。
+- “打开 XiReader”打开原生阅读面板，并返回准确本机备用链接。用户已确认 0.2.0 面板能在 Codex 中打开。
 - 在阅读器选中文字或框选区域，核对预览后点“交给 Codex”，只共享选区，不启动回答。文字、区域坐标和区域 PNG 只在主动共享后进入短期阅读会话；切页、换书、取消共享或隐藏面板会清除当前共享。
 - 想立即讨论时，在预览中点击“解释选区”“提炼要点”，或展开“自定义提问”后点“发送问题”。这会把问题与当次选区快照发到当前 Work／Codex 对话；回答出现在同一对话中。
 - “解释共享的选区”读取指定会话。多个普通阅读窗口同时活动时，工具返回窗口列表，调用者必须选定 `sessionId`，不能猜第一个窗口。

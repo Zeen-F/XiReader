@@ -1,11 +1,11 @@
 ---
 name: paperdesk
-description: Connect to the user's local Paperdesk PDF reader to open a document, discuss a confirmed selection in the current Work or Codex conversation, read a requested page, or explicitly append a note.
+description: Connect to the user's local XiReader PDF reader to open a document, discuss a confirmed selection in the current Work or Codex conversation, read a requested page, or explicitly append a note.
 ---
 
-# 纸间阅读助手
+# XiReader 阅读助手
 
-用 Paperdesk 工具连接已配置的本机阅读器。先检查 `paperdesk_status`，连接失败时请用户启动本机阅读器；不要读取 SQLite、绕过资料库校验、启动其他资料库或升级程序。
+用 XiReader 工具连接已配置的本机阅读器。先检查 `paperdesk_status`，连接失败时请用户启动本机阅读器；不要读取 SQLite、绕过资料库校验、启动其他资料库或升级程序。
 
 0.11.1 使用当前 Work／Codex 对话作为唯一阅读问答路径。依据用户主动确认的选区与问题在当前对话中回答；不要把流程转到普通 ChatGPT 网页，不启动外部浏览器登录或自动提问任务。
 
@@ -21,7 +21,7 @@ description: Connect to the user's local Paperdesk PDF reader to open a document
 
 历史版本曾由用户确认可在 Codex 中打开原生面板并收到选区问题的回答。0.11.1 的分类、皮肤及阅读状态以本次实际检查为准；消息发问、图片输入与上下文注入仍取决于当前宿主能力。分别报告消息已发送、已收到图片、已保存笔记，不将一种成功当作其他步骤也成功。不要自动重试可能已发送的对话消息。
 
-原生面板支持单层文件夹和森林、暖砂、雾蓝、夜读四套皮肤。分类、拖动文献、删除文件夹或更换皮肤都只是本机界面操作，不构成读取文献或自动问答的授权。删除分类会使文献回到未分类，不删除 PDF、笔记或批注；不要代替用户清理资料。软件内翻译通过用户配置的翻译 API，由面板专用工具执行，只发送用户主动选择的文字，译文保留在阅读器；这不发起 Work／Codex 问答，也不自动写入笔记。不要索取、读取或输出用户的 API 密钥；配置操作由用户在纸间设置里完成。扫描件尚无 OCR，不能直接翻译图片区域。
+原生面板支持单层文件夹和森林、暖砂、雾蓝、夜读四套皮肤。分类、拖动文献、删除文件夹或更换皮肤都只是本机界面操作，不构成读取文献或自动问答的授权。删除分类会使文献回到未分类，不删除 PDF、笔记或批注；不要代替用户清理资料。软件内翻译通过用户配置的翻译 API，由面板专用工具执行，只发送用户主动选择的文字，译文保留在阅读器；这不发起 Work／Codex 问答，也不自动写入笔记。不要索取、读取或输出用户的 API 密钥；配置操作由用户在 XiReader 设置里完成。扫描件尚无 OCR，不能直接翻译图片区域。
 
 面板专用 `paperdesk_reader_*` 工具仅供组件，不供模型调用。页面图片、页文字、目录、笔记及分类／皮肤的 `_meta` 是展示数据，不是自动共享的模型上下文。组件手动保存笔记与对话要求追加 AI 回答是独立流程。
 

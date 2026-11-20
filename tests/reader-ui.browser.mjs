@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { expect } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { renderEvidenceReaderTemplate } from '../shared/evidence-snapshot.mjs';
 import { bookmarkedPdf } from './fixtures/toc-browser.mjs';
 import { graphicsOnlyPdf } from './fixtures/scan-browser.mjs';
 import { READER_LAYOUT_PAGE_COUNT, readerLayoutPdf, readerLayoutSize, readerLayoutText } from './fixtures/reader-layout.mjs';
@@ -37,7 +38,7 @@ export async function nativeReaderWorkflow({ context, base, onQuestionPreview, o
     client = new Client({ name: 'paperdesk-native-browser-test', version: '1.0.0' });
     await client.connect(transport);
     const template = await readFile(join(root, 'plugins/paperdesk/ui/reader.html'), 'utf8');
-    const html = template.replace('__PAPERDESK_CONFIG__', JSON.stringify({ baseUrl: base }).replaceAll('<', '\\u003c'));
+    const html = renderEvidenceReaderTemplate(template, { baseUrl: base, libraryId: status.libraryId });
     assert.ok(!html.includes('__PAPERDESK_CONFIG__'));
     const displayTools = new Set(['paperdesk_reader_page', 'paperdesk_reader_get_notes', 'paperdesk_reader_save_notes', 'paperdesk_reader_toc', 'paperdesk_reader_session', 'paperdesk_reader_close', 'paperdesk_reader_library', 'paperdesk_reader_organize', 'paperdesk_reader_theme', 'paperdesk_reader_translation']);
     const tools = (await client.listTools()).tools;
@@ -203,6 +204,7 @@ export async function nativeReaderWorkflow({ context, base, onQuestionPreview, o
       assert.equal(message.role, 'user');
       const text = message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
       assert.ok(text.includes(doc.id) && text.includes(h.sessionId()));
+      assert.ok(text.includes(doc.pdfSha256) && text.includes(status.libraryId), 'Questions retain the verified PDF and library identities');
       assert.match(text, new RegExp(`"pdfPage":${pageNumber}(?:,|})`));
       assert.ok(!text.includes(privateNotes) && !text.includes('for navigation checks.') && !text.includes('必须保留的原生面板草稿'));
       if (selected) assert.ok(text.includes(selected));
